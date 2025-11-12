@@ -1,0 +1,10 @@
+# Ignore environment and secrets
+.env
+*.env
+
+# Virtual environment
+.venv/
+
+# # Streamlit secrets
+# secrets.toml
+
