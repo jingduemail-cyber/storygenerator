@@ -1,6 +1,6 @@
 # Ignore environment and secrets
 .env
-*.env
+# *.env
 
 # Virtual environment
 .venv/
