@@ -6,7 +6,8 @@ import streamlit as st
 
 load_dotenv(find_dotenv())
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.api_key = st.secrets["OPENAI_API_KEY"] 
+# openai.api_key = os.getenv("OPENAI_API_KEY")
 
 st.header("Personalized Children Story Generator")
 
