@@ -8,3 +8,6 @@
 # # Streamlit secrets
 # secrets.toml
 
+# Ignore generated PDFs
+*.pdf
+
