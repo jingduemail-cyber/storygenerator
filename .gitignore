@@ -6,8 +6,22 @@
 .venv/
 
 # # Streamlit secrets
-# secrets.toml
+secrets.toml
+.streamlit/secrets.toml
 
 # Ignore generated PDFs
 *.pdf
 
+# Ignore archived, wip or testing .py files
+archive_app_v1.py
+
+# Ignore any pictures generated
+*.png
+*.jpg
+
+# Ignore json files
+service_keys/*.json
+*.json
+
+# Ignore cache files
+__pycache__/
