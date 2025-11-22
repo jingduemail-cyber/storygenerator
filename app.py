@@ -49,18 +49,18 @@ from reportlab.pdfgen import canvas as canvas_module
 
 # ------------------ Configuration & Helpers ------------------
 
-# # Running on streamlit cloud
-# OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"] 
-# SENDGRID_API_KEY = st.secrets["SENDGRID_API_KEY"]
-# FROM_EMAIL = st.secrets["FROM_EMAIL"]
+# Running on streamlit cloud
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"] 
+SENDGRID_API_KEY = st.secrets["SENDGRID_API_KEY"]
+FROM_EMAIL = st.secrets["FROM_EMAIL"]
 
-# Initialize environment variables
-load_dotenv(find_dotenv())
+# # Initialize environment variables
+# load_dotenv(find_dotenv())
 
-# Running locally to retrieve keys
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") 
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
-FROM_EMAIL = os.getenv("FROM_EMAIL")
+# # Running locally to retrieve keys
+# OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") 
+# SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+# FROM_EMAIL = os.getenv("FROM_EMAIL")
 
 # # Use environment variables or Streamlit secrets
 # OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"] if "OPENAI_API_KEY" in st.secrets else None
