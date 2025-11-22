@@ -637,7 +637,7 @@ if submitted:
                     f"<br/>Click <a href='{story_audio_url}'>HERE</a> to download the audio book.</p>"
                     f"<p>✨ Your personalized children storybook is completely <strong>free to enjoy!</strong> "
                     f"<br/>If you love it and want to support the creator, a small donation would help keep the project growing and allow me to build even more magical features for families.</p>"
-                    f"<p>💛 Support the project: <a href='https://www.gofundme.com/'>HERE</a>.</p>"
+                    f"<p>💛 Support the project: <a href='https://gofund.me/4bfdc92c1'>HERE</a>. Every gesture counts and thank you! :)</p>"
                     f"<p>Best regards,<br/>The StoryGenerator Team</p>"
                 )
 
