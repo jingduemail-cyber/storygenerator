@@ -73,5 +73,5 @@ with st.expander("Can I request multiple stories?"):
     st.write("Yes, simply submit the form again with different details.")
     
 with st.expander("Can I support the StoryGenerator team?"):
-    st.write("Yes, if you enjoy the storybooks and want to support ongoing development, consider supporting me on Give.Asia: https://give.asia/help-jing-0828. Thank you!")
+    st.write("Yes, if you enjoy the storybooks and want to support ongoing development, consider supporting me on Give.Asia: The link will be updated soon. Stay tuned and thank you!")
 

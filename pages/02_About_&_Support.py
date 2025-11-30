@@ -59,9 +59,11 @@ consider supporting me on Give.Asia.
 """)
 
 st.markdown("""
-**Give.Asia:**  
-👉 https://give.asia/help-jing-0828
+The link to support will be updated soon. Please stay tuned!
 """)
+
+# **Give.Asia:**  
+# 👉 https://give.asia/help-jing-0828
 
 st.write("---")
 st.header("📬 Contact")
