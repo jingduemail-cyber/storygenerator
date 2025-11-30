@@ -1,3 +1,5 @@
+# --- Store all backend functions here ---
+
 """
 Streamlit app: Personalized Children's Storybook -> PDF (2-page landscape spreads) -> Send via SendGrid
 
@@ -7,7 +9,6 @@ Features:
 - Cover page with title + author + illustration
 - Landscape "2-page spread" layout (each PDF page contains up to 2 scenes side-by-side)
 - Automatic font scaling to avoid overflow
-- Page numbers footer
 - Send resulting PDF as an email attachment via SendGrid
 
 Usage:
@@ -43,38 +44,34 @@ from io import BytesIO
 from reportlab.pdfgen.canvas import Canvas
 import qrcode 
 from PIL import Image as PILImage
-from cloudflare_r2_upload import upload_audio_to_r2
 from reportlab.pdfgen import canvas as canvas_module
+import boto3
+import uuid
 
+# --- Import API keys ---
+# Initialize environment variables
+load_dotenv(find_dotenv())
 
-# ------------------ Configuration & Helpers ------------------
+# Use environment variables or Streamlit secrets
+OPENAI_API_KEY = (
+    os.getenv("OPENAI_API_KEY") or 
+    (st.secrets["OPENAI_API_KEY"] if "OPENAI_API_KEY" in st.secrets else st.warning("OpenAI API key not found."))
+)
 
-# Running on streamlit cloud
-OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"] 
-SENDGRID_API_KEY = st.secrets["SENDGRID_API_KEY"]
-FROM_EMAIL = st.secrets["FROM_EMAIL"]
+SENDGRID_API_KEY = (
+    os.getenv("SENDGRID_API_KEY") or 
+    (st.secrets["SENDGRID_API_KEY"] if "SENDGRID_API_KEY" in st.secrets else st.warning("SendGrid API key not found."))
+)
 
-# # Initialize environment variables
-# load_dotenv(find_dotenv())
-
-# # Running locally to retrieve keys
-# OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") 
-# SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
-# FROM_EMAIL = os.getenv("FROM_EMAIL")
-
-# # Use environment variables or Streamlit secrets
-# OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"] if "OPENAI_API_KEY" in st.secrets else None
-# SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY") or st.secrets["SENDGRID_API_KEY"] if "SENDGRID_API_KEY" in st.secrets else None
-# FROM_EMAIL = os.getenv("FROM_EMAIL") or st.secrets["FROM_EMAIL"] if "FROM_EMAIL" in st.secrets else None
-
-if not OPENAI_API_KEY:
-    st.warning("OpenAI API key not found. Please set OPENAI_API_KEY in env or Streamlit secrets.")
-if not SENDGRID_API_KEY:
-    st.warning("SendGrid API key not found. Please set SENDGRID_API_KEY in env or Streamlit secrets.")
+FROM_EMAIL = (
+    os.getenv("FROM_EMAIL") or 
+    (st.secrets["FROM_EMAIL"] if "FROM_EMAIL" in st.secrets else st.warning("Email distributor key key not found."))
+)
 
 # Initialize OpenAI client
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
+# ------------------ Configuration & Helpers ------------------
 # PDF layout constants
 PAGE_SIZE = landscape(letter)
 PAGE_WIDTH, PAGE_HEIGHT = PAGE_SIZE
@@ -213,6 +210,58 @@ def extract_scenes_and_prompts(story_text: str) -> Tuple[List[str], List[str]]:
             prompts.append('')
     return scene_texts, prompts
 
+# ------------------ Audio generation & storage ------------------
+def generate_audio_from_text(story_chunk: str) -> str:
+    audio_resp = openai_client.audio.speech.create(
+        model="tts-1",
+        input=story_chunk,
+        voice="fable",  # or any of the preset voices you choose
+    )
+    audio_bytes = audio_resp.read()  # audio binary    
+    return audio_bytes
+
+def get_r2_client():
+    """Create boto3 client for Cloudflare R2 using Streamlit secrets."""
+    account_id = st.secrets["r2"]["account_id"]
+    access_key = st.secrets["r2"]["access_key"]
+    secret_key = st.secrets["r2"]["secret_key"]
+
+    session = boto3.session.Session()
+    client = session.client(
+        "s3",
+        endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+    )
+    return client
+
+
+def upload_audio_to_r2(audio_bytes: bytes, filename: str = None) -> str:
+    """
+    Uploads audio bytes to Cloudflare R2 and returns a public URL.
+    """
+    bucket_name = st.secrets["r2"]["bucket_name"]
+    public_base_url = st.secrets["r2"]["public_base_url"]
+
+    # Auto-generate filename if not provided
+    if filename is None:
+        filename = f"{uuid.uuid4()}.mp3"
+
+    client = get_r2_client()
+
+    # Upload audio
+    client.put_object(
+        Bucket=bucket_name,
+        Key=filename,
+        Body=audio_bytes,
+        ContentType="audio/mpeg"
+    )
+
+    # Public, direct access URL
+    public_url = f"{public_base_url}/{filename}"
+
+    return public_url
+
 # ------------------ Image generation ------------------
 
 def generate_image_for_prompt(prompt: str, size: str = "auto") -> str:
@@ -242,18 +291,8 @@ def generate_image_for_prompt(prompt: str, size: str = "auto") -> str:
     b64 = resp.data[0].b64_json
     return b64
 
-# ------------------ Audio generation ------------------
-def generate_audio_from_text(story_chunk: str) -> str:
-    audio_resp = openai_client.audio.speech.create(
-        model="tts-1",
-        input=story_chunk,
-        voice="fable",  # or any of the preset voices you choose
-    )
-    audio_bytes = audio_resp.read()  # audio binary    
-    return audio_bytes
-
 # ------------------ PDF generation (2-page landscape spreads) ------------------
-
+# Utility flowable to draw page numbers in footer - not used currently
 class PageNumCanvas(Flowable):
     """Utility flowable to draw page numbers in footer via build() callback."""
     def __init__(self, doc):
@@ -263,22 +302,19 @@ class PageNumCanvas(Flowable):
     def draw(self):
         pass  # not used; page numbers are added via onPage callback
 
+# onPage callback to add page numbers and background - not used currently
 def _on_page(canvas, doc):
     page_num = canvas.getPageNumber()
     text = f"Page {page_num}"
     canvas.saveState()
     # --- GLOBAL PASTEL BACKGROUND (applies to ALL pages) ---
     canvas.setFillColorRGB(0.96, 0.98, 1.0)   # pastel blue
-    # Examples:
-    #   Pink:  c.setFillColorRGB(1.0, 0.95, 0.97)
-    #   Mint:  c.setFillColorRGB(0.94, 1.0, 0.96)
-    #   Cream: c.setFillColorRGB(1.0, 0.99, 0.94)
     canvas.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, fill=1, stroke=0)
     canvas.setFont('Helvetica', 10)
     canvas.drawCentredString(PAGE_WIDTH / 2.0, 0.3 * inch, text)
     canvas.restoreState()
 
-
+# Utility to fit paragraph text into a box by adjusting font size - not used currently
 def fit_paragraph_to_box(text: str, box_width: float, box_height: float, style: ParagraphStyle, min_font: int = 8, max_font: int = 18) -> Paragraph:
     """Return a Paragraph instance sized so that it fits inside box_width x box_height by adjusting font size."""
     # Try decreasing font size until it fits
@@ -299,7 +335,7 @@ def fit_paragraph_to_box(text: str, box_width: float, box_height: float, style: 
     final_style = ParagraphStyle(name=f"tmp_min", parent=style, fontSize=min_font, leading=int(min_font * 1.2))
     return Paragraph(text.replace('\n', '<br/>'), final_style)
 
-# QR code generation function
+# QR code generation function - not used currently
 def generate_qr_code(url: str):
     """
     Convert URL into a QR code ReportLab Image().
@@ -317,7 +353,7 @@ def generate_qr_code(url: str):
     qr_rl = RLImage(img_buffer, width=150, height=150)
     return qr_rl
 
-# Compress base64 image
+# Compress base64 image - not used currently
 def compress_image(image_b64, quality=70):
     img_bytes = io.BytesIO(base64.b64decode(image_b64))
     img = PILImage.open(img_bytes)
@@ -514,7 +550,7 @@ def create_storybook_pdf_bytes(
 
 # ------------------ SendGrid email ------------------
 
-def send_email_with_attachment(send_to: str, subject: str, body: str, attachment_bytes: bytes, filename: str, from_email: str):
+def send_email_with_attachment(send_to: str, subject: str, body: str, attachment_bytes: bytes, filename: str, from_email=None):
     message = Mail(
         from_email=FROM_EMAIL,
         to_emails=send_to,
@@ -534,125 +570,3 @@ def send_email_with_attachment(send_to: str, subject: str, body: str, attachment
     sg = SendGridAPIClient(SENDGRID_API_KEY)
     response = sg.send(message)
     return response
-
-# ------------------ Streamlit UI ------------------
-
-st.set_page_config(page_title="Personalized Storybook Generator", layout="wide")
-st.title("Personalized Children's Storybook")
-
-with st.form(key="story_form"):
-    st.header("Story Inputs")
-    child_name = st.text_input("Child's Name", value="Bond")
-    child_age = st.text_input("Child's Age", value="3 months old")
-    child_interest = st.text_input("Child's Interests (Comma Separated)", value="Space, robots")
-    story_objective = st.text_area("Story Objective / Moral", value="Encourage curiosity and kindness")
-    your_name = st.text_input("Author Name", value="Mom & Dad")
-    recipient_email = st.text_input("Recipient Email for PDF", value="")
-    cover_prompt_override = st.text_input("Optional: Cover Illustration Prompt (Leave Blank to Auto-generate)", value="")
-    # with_image_choice = st.radio(
-    #     "Choose Storybook Format",
-    #     ["Text + Images + Audio", "Text + Audio Only"],
-    #     horizontal=True,
-    # )
-    submitted = st.form_submit_button("Generate Storybook")
-
-if submitted:
-    with st.spinner("Generating story..."):
-        story_text = generate_story_text(child_name, child_age, child_interest, story_objective, your_name)
-        story_title = generate_story_title(text = story_text)
-    
-    # Cover page title generation
-    story_title = story_title.strip()
-    st.success("Story title generated.")
-    # st.write(f"## Story Title: {story_title}")
-
-    # Extract scenes and illustration prompts
-    scenes, prompts = extract_scenes_and_prompts(story_text)
-    st.success("Story scenes generated.")
-    # st.write("### Generated Scenes Preview")
-    
-    # # Display scenes and prompts - To be commented out later
-    # for i, s in enumerate(scenes, start=1):
-    #     st.markdown(f"**Scene {i}:** {s}")
-    #     st.markdown(f"**Prompt {i}:** {prompts[i-1]}")
-    
-    # Audio generation
-    with st.spinner("Generating story audio..."):
-        story_audio = generate_audio_from_text(story_chunk = "\n\n".join(scenes))
-        # st.success("Story audio generated.")
-        
-    # Upload audio to Cloudflare R2
-    with st.spinner("Uploading audio to Cloudflare R2..."):
-        story_audio_url = upload_audio_to_r2(audio_bytes = story_audio, filename=f"{story_title.replace(' ', '_')}_audio.mp3")
-        st.success("Story audio generated.")
-        # st.write(f"**Audio URL:** {story_audio_url}")
-    
-    # COVER illustration
-    if cover_prompt_override.strip():
-        cover_prompt = cover_prompt_override.strip()
-    else:
-        # Create a concise cover prompt based on title & author
-        cover_prompt = f"Cover illustration for children's book titled '{story_title}'. Do not include any text in the image."
-        # st.success("Story cover prompt generated.")
-        # st.write(f"**Cover Illustration Prompt:** {cover_prompt}")
-
-    with st.spinner("Generating cover image..."):
-        cover_b64 = generate_image_for_prompt(cover_prompt, size="auto")
-        # st.success("Cover image generated.")
-
-    # Generate each scene image
-    images_b64 = []
-    with st.spinner("Generating scene images..."):
-        for p in prompts:
-            img_b64 = generate_image_for_prompt(p, size="auto")            
-            images_b64.append(img_b64)
-
-    st.success("Scene images generated.")
-
-    # Create PDF bytes
-    with st.spinner("Composing PDF..."):
-        pdf_bytes = create_storybook_pdf_bytes(
-            title=story_title,
-            author=your_name,
-            cover_image_b64=cover_b64,
-            scenes=scenes,
-            images_b64=images_b64,
-            story_audio_url=story_audio_url,
-        )
-
-    st.success("PDF ready!")
-
-    # st.download_button("Download Storybook PDF", data=pdf_bytes, file_name="storybook.pdf", mime="application/pdf")
-
-    # Send via SendGrid if recipient provided
-    if recipient_email:
-        if not SENDGRID_API_KEY:
-            st.error("SENDGRID_API_KEY not configured. Can't send email.")
-        else:
-            with st.spinner(f"Sending PDF to {recipient_email}"):
-                subject = f"Your storybook: {story_title}"
-                body = (
-                    f"<p>Hello!</p>"
-                    f"<p>We have generated the personalized storybook '{story_title}' for {child_name} in the PDF attachment. "
-                    f"<br/>Click <a href='{story_audio_url}'>HERE</a> to download the audio book.</p>"
-                    f"<p>✨ Your personalized children storybook is completely <strong>free to enjoy!</strong> "
-                    f"<br/>If you love it and want to support the creator, a small donation would help keep the project growing and allow me to build even more magical features for families.</p>"
-                    f"<p>💛 Support the project: <a href='https://gofund.me/4bfdc92c1'>HERE</a>. Every gesture counts and thank you!</p>"
-                    f"<p>Best regards,<br/>The StoryGenerator Team</p>"
-                )
-
-                try:
-                    resp = send_email_with_attachment(
-                        send_to=recipient_email,
-                        subject=subject,
-                        body=body,
-                        attachment_bytes=pdf_bytes,
-                        filename="storybook.pdf",
-                        from_email=FROM_EMAIL,
-                    )
-                    # st.success(f"Email sent (status {resp.status_code}).")
-                    st.success(f"Email sent.")
-                except Exception as e:
-                    st.error(f"Failed to send email: {e}")
-
-# End of file
