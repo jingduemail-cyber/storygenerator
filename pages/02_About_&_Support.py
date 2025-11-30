@@ -43,7 +43,7 @@ st.markdown("""
 This project was created to bring joy, imagination, and personalized storytelling 
 to children and families around the world.
 
-Each book is generated using AI-powered text, illustration, and PDF workflows, 
+Each book is generated using AI-powered text, illustration, audio and PDF workflows, 
 designed with love and care.
 
 """)

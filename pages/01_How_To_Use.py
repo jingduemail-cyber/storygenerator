@@ -42,14 +42,16 @@ st.header("🧸 How It Works")
 
 st.markdown("""
 1. Fill in your child's details on the **Home** page  
-2. Design a prompt for the cover image (optional)  
-3. Click **Submit**  
-4. Our system generates text, illustrations, and a PDF  
-5. You will receive the final storybook in about **15 minutes**  
+2. Click **Generate Storybook**  
+3. Our system generates story text, illustrations, audio and packed into a PDF  
+4. You will receive the final storybook in about **15 minutes**  
 """)
 
 st.write("---")
 st.header("💬 Frequently Asked Questions")
+
+with st.expander("How much does it cost me to generate a personalized story book?"):
+    st.write("It is completely free. Enjoy!")
 
 with st.expander("How long does it take?"):
     st.write("Around 10–15 minutes depending on server load.")
