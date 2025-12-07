@@ -81,11 +81,22 @@ FROM_EMAIL = (
 # -------------------------------------------------------------
 # Config & defaults
 # -------------------------------------------------------------
-IMAGE_PROVIDER = os.getenv("IMAGE_PROVIDER", "local").lower()
-REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
+IMAGE_PROVIDER = (
+    os.getenv("IMAGE_PROVIDER", "local").lower() or
+    (st.secrets["IMAGE_PROVIDER"] if "IMAGE_PROVIDER" in st.secrets else st.warning("Image provider setting not found."))
+)
+
+REPLICATE_API_TOKEN = (
+    os.getenv("REPLICATE_API_TOKEN") or
+    (st.secrets["REPLICATE_API_TOKEN"] if "REPLICATE_API_TOKEN" in st.secrets else st.warning("Replicate API key not found."))
+)
 
 LOCAL_MODEL_ID = os.getenv("LOCAL_MODEL_ID", "stabilityai/sdxl-turbo")
-REPLICATE_MODEL_ID = os.getenv("REPLICATE_MODEL_ID", "stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc")
+
+REPLICATE_MODEL_ID = (
+    os.getenv("REPLICATE_MODEL_ID", "black-forest-labs/flux-schnell") or
+    (st.secrets["REPLICATE_MODEL_ID"] if "REPLICATE_MODEL_ID" in st.secrets else st.warning("Replicate model id not found."))
+)
 
 LOCAL_MAX_SECONDS = float(os.getenv("LOCAL_MAX_SECONDS", "25.0"))
 HARD_TIMEOUT_SECONDS = int(os.getenv("HARD_TIMEOUT_SECONDS", "300"))   # hard kill: 5 minutes
@@ -184,7 +195,7 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         - Illustration prompts must always replaces “baby” with “gentle cartoon figure”.
         - Do NOT depict a real person or baby or include the child's name in the illustration prompt.
         - Illustrations of the fictional characters must be consistent throughout the entire scenes.
-        - Use soft watercolor children-book illustration style. Gentle pastel colors, round shapes, dreamy warm mood for all images.
+        - Use soft watercolor children-book illustration style. Gentle pastel colors, round shapes, dreamy warm mood, friendly, colorful, safe for children, whimsical, cartoon for all images.
 
         Follow these for the story guidelines:
         - Scenes should begin with a captivating hook. 
@@ -198,7 +209,7 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         - No typos and smooth flows.
         
         Importantly, keep the scene count and word count exactly as specified above. USe simple words and short sentences suitable for {child_age} children.
-        Lastly and very importantly again, strictly follow illustration prompt guidelines mentioned above. Use soft watercolor children-book illustration style. Gentle pastel colors, round shapes, dreamy warm mood for all images.
+        Lastly and very importantly again, strictly follow illustration prompt guidelines mentioned above. Use soft watercolor children-book illustration style. Gentle pastel colors, round shapes, dreamy warm mood, friendly, colorful, safe for children, whimsical, cartoon for all images.
         
         Story starts now:
     """
