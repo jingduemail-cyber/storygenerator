@@ -2,8 +2,10 @@
 import streamlit as st
 from utils.processor import (
     build_story_prompt, 
-    generate_story_text, 
+    generate_story_text,
+    generate_story_text_replicate, 
     generate_story_title, 
+    generate_story_title_replicate,
     extract_scenes_and_prompts,
     generate_audio_from_text,
     get_r2_client, 
@@ -99,6 +101,12 @@ if submitted:
             # Build story and title
             story_text = generate_story_text(child_name, child_age, child_interest, story_objective, your_name)
             story_title = generate_story_title(text = story_text)
+            
+            # # Test with Replicate text model
+            # story_text = generate_story_text_replicate(child_name, child_age, child_interest, story_objective, your_name) 
+            # story_title = generate_story_title_replicate(text = story_text)
+            
+            
             story_title = story_title.strip()
             print(f"Generated story title: {story_title}")
 
@@ -109,8 +117,9 @@ if submitted:
             
         # Audio generation
         with st.spinner("Generating story audio..."):
-            story_audio = generate_audio_from_text(story_chunk = "\n\n".join(scenes))
-            story_audio_url = upload_audio_to_r2(audio_bytes = story_audio, filename=f"{story_title.replace(' ', '_')}_audio.mp3")
+            # story_audio = generate_audio_from_text(story_chunk = "\n\n".join(scenes))
+            # story_audio_url = upload_audio_to_r2(audio_bytes = story_audio, filename=f"{story_title.replace(' ', '_')}_audio.mp3")
+            story_audio_url = "www.google.com"  # Temporary for testing
             st.success("Audio generation complete!")
             print(f"Uploaded audio URL: {story_audio_url}")
         

@@ -50,6 +50,7 @@ import uuid
 import time
 import logging
 from multiprocessing import Process, Queue
+import replicate
 
 
 
@@ -95,7 +96,12 @@ LOCAL_MODEL_ID = os.getenv("LOCAL_MODEL_ID", "stabilityai/sdxl-turbo")
 
 REPLICATE_MODEL_ID = (
     os.getenv("REPLICATE_MODEL_ID") or
-    (st.secrets["REPLICATE_MODEL_ID"] if "REPLICATE_MODEL_ID" in st.secrets else st.warning("Replicate model id not found."))
+    (st.secrets["REPLICATE_MODEL_ID"] if "REPLICATE_MODEL_ID" in st.secrets else st.warning("Replicate image model id not found."))
+)
+
+REPLICATE_TEXT_MODEL_ID = (
+    os.getenv("REPLICATE_TEXT_MODEL_ID") or
+    (st.secrets["REPLICATE_TEXT_MODEL_ID"] if "REPLICATE_TEXT_MODEL_ID" in st.secrets else st.warning("Replicate text model id not found."))
 )
 
 LOCAL_MAX_SECONDS = float(os.getenv("LOCAL_MAX_SECONDS", "25.0"))
@@ -181,9 +187,9 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         Story objective: {story_objective}
         
         For total scene count and word count, strictly follow these guidelines based on the child's age {child_age}:
-        - For child's age from 0 - 2 years old, total scene count should be exactly 3 pages with total word count as close to 75 words as possible. 
-        - For child's age from 2 - 4 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
-        - For child's age from 4 - 6 years old, total scene count should be exactly 5 pages with total word count as close to 125 words as possible.
+        - For child's age from 0 - 2 years old, total scene count should be exactly 2 pages with total word count as close to 50 words as possible. 
+        - For child's age from 2 - 4 years old, total scene count should be exactly 3 pages with total word count as close to 75 words as possible.
+        - For child's age from 4 - 6 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
         
         For each scene separated by a line containing only '---'. For each scene:
         - Provide 2-5 sentences of narrative tailored to {child_age}-old children, incorporating {child_interest} and aligned with the story objective of {story_objective}.
@@ -195,7 +201,7 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         - Illustration prompts must always replaces “baby” with “gentle cartoon figure”.
         - Do NOT depict a real person or baby or include the child's name in the illustration prompt.
         - Illustrations of the fictional characters must be consistent throughout the entire scenes.
-        - Use soft watercolor children-book illustration style. Gentle pastel colors, round shapes, dreamy warm mood, friendly, colorful, safe for children, whimsical, cartoon for all images.
+        - Use soft watercolor children-book illustration style. Gentle pastel colors, round shapes, dreamy warm mood, friendly, safe for children, whimsical, cartoon for all images.
 
         Follow these for the story guidelines:
         - Scenes should begin with a captivating hook. 
@@ -209,7 +215,7 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         - No typos and smooth flows.
         
         Importantly, keep the scene count and word count exactly as specified above. USe simple words and short sentences suitable for {child_age} children.
-        Lastly and very importantly again, strictly follow illustration prompt guidelines mentioned above. Use soft watercolor children-book illustration style. Gentle pastel colors, round shapes, dreamy warm mood, friendly, colorful, safe for children, whimsical, cartoon for all images.
+        Lastly and very importantly again, strictly follow illustration prompt guidelines mentioned above. Use soft watercolor children-book illustration style. Gentle pastel colors, round shapes, dreamy warm mood, friendly, safe for children, whimsical, cartoon for all images.
         
         Story starts now:
     """
@@ -231,6 +237,43 @@ def generate_story_text(child_name, child_age, child_interest, story_objective, 
     text = response.choices[0].message.content
     return text
 
+# Generate text using Replicate model REPLICATE_TEXT_MODEL_ID
+def generate_story_text_replicate(child_name, child_age, child_interest, story_objective, your_name):
+    user_prompt = build_story_prompt(child_name, child_age, child_interest, story_objective, your_name)
+    
+    system_prompt = (
+        "You are a children's storybook writer. Your job is to write warm, gentle, "
+        "imaginative stories suitable for young children. Use soft pacing, simple vocabulary, "
+        "and emotional clarity. Avoid scary elements, violence, or complex plots. "
+        "Use pastel, dreamlike imagery. Keep tone uplifting and magical."
+    )
+    
+    try:
+        output = replicate.run(
+            REPLICATE_TEXT_MODEL_ID,
+            input={
+                "prompt": f"<s>[INST]<<SYS>>{system_prompt}<</SYS>>{user_prompt}[/INST]",
+                "max_new_tokens": 600,
+                "temperature": 0.8,
+                "top_p": 0.9,
+                "presence_penalty": 0.2,
+                "frequency_penalty": 0.2,
+                "min_tokens": 100,
+            },
+        )
+
+        # replicate returns a generator of text chunks → join them
+        if isinstance(output, list):
+            return "".join(output).strip()
+        elif isinstance(output, str):
+            return output.strip()
+        else:
+            return str(output)
+
+    except Exception as e:
+        return f"ERROR generating story: {e}"
+
+
 def generate_story_title(text: str) -> str:
     response = openai_client.chat.completions.create(
         model="gpt-5.1",
@@ -241,9 +284,39 @@ def generate_story_title(text: str) -> str:
         max_completion_tokens=50,
         temperature=0.7,
     )
-    # title = response.choices[0].message.content.strip().strip('"')
     title = response.choices[0].message.content.strip()
     return title
+
+def generate_story_title_replicate(text: str) -> str:
+    title_user_prompt = f"Please generate one short catchy storybook title, remember only one title, for this story:\n\n{text}"
+    
+    title_system_prompt = (
+        "You are a children's storybook writer. Your job is to generate short, "
+        "creative and catchy titles for children's storybook. Use soft pacing, simple vocabulary."
+    )
+    
+    try:
+        title_output = replicate.run(
+            REPLICATE_TEXT_MODEL_ID,
+            input={
+                "prompt": f"<s>[INST]<<SYS>>{title_system_prompt}<</SYS>>{title_user_prompt}[/INST]",
+                "max_new_tokens": 60,
+                "temperature": 0.8,
+            },
+        )
+
+        # replicate returns a generator of text chunks → join them
+        if isinstance(title_output, list):
+            return "".join(title_output).strip()
+        elif isinstance(title_output, str):
+            return title_output.strip()
+        else:
+            return str(title_output)
+
+    except Exception as e:
+        return f"ERROR generating story: {e}"
+
+
 
 def extract_scenes_and_prompts(story_text: str) -> Tuple[List[str], List[str]]:
     """Return (scene_texts, illustration_prompts) in order."""
@@ -510,7 +583,7 @@ def generate_images_for_prompts(
                 print(f"Generating image for prompt: {p}")
                 img = _generate_replicate(p, width, height, prompt_strength)
                 out.append(_pil_to_b64(img))
-                time.sleep(15)  # to avoid rate limits
+                time.sleep(5)  # to avoid rate limits
                 
             except:
                 out.append(_BLANK_PNG_B64)
