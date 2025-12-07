@@ -47,10 +47,20 @@ from PIL import Image as PILImage
 from reportlab.pdfgen import canvas as canvas_module
 import boto3
 import uuid
+import time
+import logging
+from multiprocessing import Process, Queue
+
+
+
+
+
 
 # --- Import API keys ---
 # Initialize environment variables
 load_dotenv(find_dotenv())
+load_dotenv()
+logging.basicConfig(level=logging.INFO)
 
 # Use environment variables or Streamlit secrets
 OPENAI_API_KEY = (
@@ -67,6 +77,36 @@ FROM_EMAIL = (
     os.getenv("FROM_EMAIL") or 
     (st.secrets["FROM_EMAIL"] if "FROM_EMAIL" in st.secrets else st.warning("Email distributor key key not found."))
 )
+
+# -------------------------------------------------------------
+# Config & defaults
+# -------------------------------------------------------------
+IMAGE_PROVIDER = os.getenv("IMAGE_PROVIDER", "local").lower()
+REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
+
+LOCAL_MODEL_ID = os.getenv("LOCAL_MODEL_ID", "stabilityai/sdxl-turbo")
+REPLICATE_MODEL_ID = os.getenv("REPLICATE_MODEL_ID", "stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc")
+
+LOCAL_MAX_SECONDS = float(os.getenv("LOCAL_MAX_SECONDS", "25.0"))
+HARD_TIMEOUT_SECONDS = int(os.getenv("HARD_TIMEOUT_SECONDS", "300"))   # hard kill: 5 minutes
+
+DEFAULT_SIZE = (768, 768)
+FALLBACK_SIZE = (512, 512)
+DEFAULT_STEPS = 4
+FALLBACK_STEPS = 2
+DEFAULT_PROMPT_STRENGTH = 1.2
+
+# blank PNG base64 (1x1 transparent)
+_BLANK_PNG_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2NgYGD4DwABBAEA"
+    "AqF5/AAAAABJRU5ErkJggg=="
+)
+
+_local_pipe = None
+_replicate_client = None
+
+
+
 
 # Initialize OpenAI client
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
@@ -130,13 +170,13 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         Story objective: {story_objective}
         
         For total scene count and word count, strictly follow these guidelines based on the child's age {child_age}:
-        - For child's age from 0 - 2 years old, total scene count should be exactly 2 pages with total word count as close to 60 words as possible. 
-        - For child's age from 2 - 4 years old, total scene count should be exactly 4 pages with total word count as close to 120 words as possible.
-        - For child's age from 4 - 6 years old, total scene count should be exactly 6 pages with total word count as close to 180 words as possible.
+        - For child's age from 0 - 2 years old, total scene count should be exactly 3 pages with total word count as close to 75 words as possible. 
+        - For child's age from 2 - 4 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
+        - For child's age from 4 - 6 years old, total scene count should be exactly 5 pages with total word count as close to 125 words as possible.
         
         For each scene separated by a line containing only '---'. For each scene:
         - Provide 2-5 sentences of narrative tailored to {child_age}-old children, incorporating {child_interest} and aligned with the story objective of {story_objective}.
-        - Each scene has maximum 5 lines in the page.
+        - Each scene has preferably 3 lines and maximum 5 lines in the page.
         - Include one short illustration prompt in parentheses on its own line immediately after the scene text. 
         
         For illustration prompts, follow these guidelines:
@@ -144,6 +184,7 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         - Illustration prompts must always replaces “baby” with “gentle cartoon figure”.
         - Do NOT depict a real person or baby or include the child's name in the illustration prompt.
         - Illustrations of the fictional characters must be consistent throughout the entire scenes.
+        - Use soft watercolor children-book illustration style. Gentle pastel colors, round shapes, dreamy warm mood for all images.
 
         Follow these for the story guidelines:
         - Scenes should begin with a captivating hook. 
@@ -157,7 +198,7 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         - No typos and smooth flows.
         
         Importantly, keep the scene count and word count exactly as specified above. USe simple words and short sentences suitable for {child_age} children.
-        Lastly and very importantly again, strictly follow illustration prompt guidelines mentioned above. 
+        Lastly and very importantly again, strictly follow illustration prompt guidelines mentioned above. Use soft watercolor children-book illustration style. Gentle pastel colors, round shapes, dreamy warm mood for all images.
         
         Story starts now:
     """
@@ -264,32 +305,240 @@ def upload_audio_to_r2(audio_bytes: bytes, filename: str = None) -> str:
 
 # ------------------ Image generation ------------------
 
-def generate_image_for_prompt(prompt: str, size: str = "auto") -> str:
-    """Return base64 PNG string from OpenAI image generation."""
-    if not prompt:
-        # return a tiny blank png base64 as fallback
-        blank_png = (
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2NgYGD4DwABBAEA"
-            "AqF5/AAAAABJRU5ErkJggg=="
-        )
-        return blank_png
 
-    prompt  = (
-        "Soft watercolor children-book illustration. Gentle pastel colors, round shapes, dreamy warm mood."
-        "Create fully fictional, stylized cartoon characters with no realistic human features."
-        "Do not depict any real or identifiable person, nor mention any children name in the prompt."
-        + prompt
+
+# -------------------------------------------------------------
+# Helpers
+# -------------------------------------------------------------
+def _pil_to_b64(img: PILImage.Image) -> str:
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+def _strengthen_prompt(prompt: str, strength: float) -> str:
+    if strength <= 1.0:
+        return prompt
+    anchor = (
+        "Soft watercolor children-book illustration. Gentle pastel colors, "
+        "round shapes, dreamy warm mood."
     )
-    
-    resp = openai_client.images.generate(
-        model="gpt-image-1-mini",
-        prompt=prompt,
-        size=size,
-        n=1,
-        background="transparent",
+    repeats = min(3, int(round((strength - 1.0) * 2)))
+    return f"{anchor} " + " ".join([anchor] * repeats) + " " + prompt
+
+
+# -------------------------------------------------------------
+# LOCAL SDXL-TURBO PIPELINE
+# -------------------------------------------------------------
+def _load_local_pipe():
+    global _local_pipe
+    if _local_pipe is not None:
+        return _local_pipe
+
+    from diffusers import AutoPipelineForText2Image
+    import torch
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    dtype = torch.float16 if device == "cuda" else torch.float32
+
+    logging.info(f"Loading SDXL-Turbo locally ({LOCAL_MODEL_ID})…")
+    pipe = AutoPipelineForText2Image.from_pretrained(
+        LOCAL_MODEL_ID,
+        use_safetensors=True,
     )
-    b64 = resp.data[0].b64_json
-    return b64
+
+    try:
+        pipe = pipe.to(device, dtype=dtype)
+    except:
+        pipe = pipe.to(device)
+
+    _local_pipe = pipe
+    return pipe
+
+
+# -------------------------------------------------------------
+# LOCAL GENERATION (with timeout wrapper)
+# -------------------------------------------------------------
+def _local_generate_worker(prompts, width, height, steps, strength, out_q):
+    """Executed inside subprocess. Produces list of PIL images."""
+    try:
+        pipe = _load_local_pipe()
+        prompts_prepped = [_strengthen_prompt(p, strength) for p in prompts]
+
+        try:
+            result = pipe(
+                prompts_prepped,
+                width=width,
+                height=height,
+                num_inference_steps=steps,
+                guidance_scale=0.0,
+            )
+            imgs = result.images
+        except TypeError:
+            # fallback sequential
+            imgs = []
+            for pp in prompts_prepped:
+                r = pipe(pp, width=width, height=height,
+                         num_inference_steps=steps, guidance_scale=0.0)
+                imgs.append(r.images[0])
+
+        out_q.put(imgs)
+    except Exception as e:
+        out_q.put(e)
+
+
+def _generate_local_with_timeout(prompts, width, height, steps, strength):
+    """
+    Spawns a subprocess to allow safe timeout+kill.
+    """
+    q = Queue()
+    p = Process(
+        target=_local_generate_worker,
+        args=(prompts, width, height, steps, strength, q),
+    )
+
+    p.start()
+    p.join(HARD_TIMEOUT_SECONDS)
+
+    if p.is_alive():
+        logging.error("Local SDXL process stuck → FORCE TERMINATING.")
+        p.terminate()
+        p.join()
+        return None  # main code will fallback
+
+    result = q.get()
+    if isinstance(result, Exception):
+        raise result
+    return result  # list of PIL images
+
+
+# -------------------------------------------------------------
+# REPLICATE PROVIDER
+# -------------------------------------------------------------
+def _get_replicate_client():
+    global _replicate_client
+    if _replicate_client:
+        return _replicate_client
+
+    import replicate
+    if not REPLICATE_API_TOKEN:
+        raise RuntimeError("REPLICATE_API_TOKEN missing")
+    _replicate_client = replicate
+    _replicate_client.Client(api_token=REPLICATE_API_TOKEN)
+    return _replicate_client
+
+
+def _generate_replicate(prompt, width, height, strength):
+    import requests
+
+    client = _get_replicate_client()
+    pp = _strengthen_prompt(prompt, strength)
+
+    output = client.run(
+        REPLICATE_MODEL_ID,
+        input={"prompt": pp, "width": width, "height": height},
+    )
+
+    url = output[0] if isinstance(output, list) else output
+    img = PILImage.open(io.BytesIO(requests.get(url).content)).convert("RGBA")
+    return img
+
+
+# -------------------------------------------------------------
+# PUBLIC BATCH API
+# -------------------------------------------------------------
+def generate_images_for_prompts(
+    prompts: List[str],
+    prompt_strength: float = DEFAULT_PROMPT_STRENGTH,
+    prefer_size: Optional[tuple] = None,
+    prefer_steps: Optional[int] = None,
+) -> List[str]:
+
+    if not prompts:
+        return []
+
+    width, height = prefer_size if prefer_size else DEFAULT_SIZE
+    steps = prefer_steps if prefer_steps is not None else DEFAULT_STEPS
+
+    # ---------------------------------------------------------
+    # LOCAL MODE
+    # ---------------------------------------------------------
+    if IMAGE_PROVIDER == "local":
+        start = time.time()
+        imgs = _generate_local_with_timeout(
+            prompts, width, height, steps, prompt_strength
+        )
+        elapsed = time.time() - start
+
+        # hard timeout => None returned => fallback
+        if imgs is None:
+            logging.error("Hard timeout triggered — using fallback size.")
+            imgs = _generate_local_with_timeout(
+                prompts, FALLBACK_SIZE[0], FALLBACK_SIZE[1], FALLBACK_STEPS, prompt_strength
+            )
+
+        # soft fallback if slow
+        if elapsed > LOCAL_MAX_SECONDS:
+            logging.warning("Slow local generation — retrying with smaller parameters.")
+            imgs = _generate_local_with_timeout(
+                prompts, FALLBACK_SIZE[0], FALLBACK_SIZE[1], FALLBACK_STEPS, prompt_strength
+            )
+
+        if imgs is None:
+            return [_BLANK_PNG_B64 for _ in prompts]
+
+        return [_pil_to_b64(img) for img in imgs]
+
+    # ---------------------------------------------------------
+    # REPLICATE MODE (local or cloud)
+    # ---------------------------------------------------------
+    elif IMAGE_PROVIDER == "replicate":
+        out = []
+        for p in prompts:
+            try:
+                print(f"Generating image for prompt: {p}")
+                img = _generate_replicate(p, width, height, prompt_strength)
+                out.append(_pil_to_b64(img))
+                time.sleep(15)  # to avoid rate limits
+                
+            except:
+                out.append(_BLANK_PNG_B64)
+                print(f"Failed to generate image for prompt: {p} and returned blank image.")
+        return out
+
+    else:
+        raise ValueError(f"Unknown IMAGE_PROVIDER: {IMAGE_PROVIDER}")
+
+
+# -------------------------------------------------------------
+# SINGLE IMAGE (backwards compatible)
+# -------------------------------------------------------------
+def generate_image_for_prompt(prompt: str, size: str = "small") -> str:
+    if not prompt:
+        print("No prompt provided, returning blank image.")
+        return _BLANK_PNG_B64
+
+    size_map = {
+        # "auto": DEFAULT_SIZE,
+        "auto": (768, 768),
+        "small": FALLBACK_SIZE,
+        # "medium": DEFAULT_SIZE,
+        "large": (1024, 1024),
+    }
+    width, height = size_map.get(size, DEFAULT_SIZE)
+    print(f"Selected size: {size} ({width}x{height})")
+    print(f"Generating single image with size: {size} ({width}x{height})")
+
+    result = generate_images_for_prompts(
+        [prompt],
+        prompt_strength=DEFAULT_PROMPT_STRENGTH,
+        prefer_size=(width, height),
+    )
+    return result[0]
+
+
+
+
 
 # ------------------ PDF generation (2-page landscape spreads) ------------------
 # Utility flowable to draw page numbers in footer - not used currently

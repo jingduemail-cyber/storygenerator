@@ -53,17 +53,11 @@ st.header("☕ Support My Work")
 
 st.markdown("""
 If you enjoy the storybooks and want to support ongoing development,  
-consider supporting me on Give.Asia.
+consider supporting me on GoGetFunding.
 
 **Your support keeps this project running** 💛  
+👉 https://gogetfunding.com/give-a-child-the-gift-of-their-own-story/
 """)
-
-st.markdown("""
-The link to support will be updated soon. Please stay tuned!
-""")
-
-# **Give.Asia:**  
-# 👉 https://give.asia/help-jing-0828
 
 st.write("---")
 st.header("📬 Contact")

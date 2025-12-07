@@ -13,6 +13,7 @@ from utils.processor import (
     send_email_with_attachment,
 )
 
+
 # --- Set up global page formatting and styles ---
 st.set_page_config(
     page_title="Personalized Storybook Generator",
@@ -114,17 +115,17 @@ if submitted:
             print(f"Uploaded audio URL: {story_audio_url}")
         
         # Cover illustration generation
-        cover_prompt = f"Cover illustration for children's book titled '{story_title}'. Do not include any text in the image."
+        cover_prompt = f"Do not include any text in the image. Design a cover illustration for children's book titled '{story_title}'. Do not include any text in the image."
 
         with st.spinner("Generating cover image..."):
-            cover_b64 = generate_image_for_prompt(cover_prompt, size="auto")
+            cover_b64 = generate_image_for_prompt(cover_prompt, size="small")
             st.success("Cover image generated.")
 
         # Generate each scene image
         images_b64 = []
         with st.spinner("Generating scene images..."):
             for p in prompts:
-                img_b64 = generate_image_for_prompt(p, size="auto")            
+                img_b64 = generate_image_for_prompt(p, size="small")            
                 images_b64.append(img_b64)
         
         st.success("Scene images generated.")
@@ -150,11 +151,9 @@ if submitted:
                 subject = f"Your storybook: {story_title}"
                 body = (
                     f"<p>Hello!</p>"
-                    f"<p>We have generated the personalized storybook '{story_title}' for {child_name} in the PDF attachment. "
+                    f"<p>We have generated the personalized storybook '{story_title}' for {child_name} in the PDF attachment."
                     f"<br/>Click <a href='{story_audio_url}'>HERE</a> to download the audio book.</p>"
-                    f"<p>✨ Your personalized children storybook is completely <strong>free to enjoy!</strong> "
-                    f"<br/>If you love it and want to support the creator, a small donation would help keep the project growing and allow me to build even more magical features for families.</p>"
-                    f"<p>💛 We will update the link to support the project soon. Please stay tuned! Every gesture counts and thank you!</p>"
+                    f"<p>✨ Your personalized children storybook is completely <strong>free to enjoy!</strong> Hope you like it!</p>"
                     f"<p>Best regards,<br/>The StoryGenerator Team</p>"
                 )
 

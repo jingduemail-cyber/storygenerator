@@ -1,6 +1,6 @@
 # Ignore environment and secrets
 .env
-# *.env
+*.env
 
 # Virtual environment
 .venv/
@@ -13,10 +13,7 @@ secrets.toml
 *.pdf
 
 # Ignore archived, wip or testing .py files
-archive_app_v1.py
-archive_app_v2.py
-archive_app_v3.py
-cloudflare_r2_upload.py
+.archives/
 
 # Ignore any pictures generated
 *.png
