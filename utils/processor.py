@@ -583,7 +583,7 @@ def generate_images_for_prompts(
                 print(f"Generating image for prompt: {p}")
                 img = _generate_replicate(p, width, height, prompt_strength)
                 out.append(_pil_to_b64(img))
-                time.sleep(5)  # to avoid rate limits
+                time.sleep(10)  # to avoid rate limits
                 
             except:
                 out.append(_BLANK_PNG_B64)
