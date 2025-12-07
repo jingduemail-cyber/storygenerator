@@ -82,7 +82,7 @@ FROM_EMAIL = (
 # Config & defaults
 # -------------------------------------------------------------
 IMAGE_PROVIDER = (
-    os.getenv("IMAGE_PROVIDER", "local").lower() or
+    os.getenv("IMAGE_PROVIDER") or
     (st.secrets["IMAGE_PROVIDER"] if "IMAGE_PROVIDER" in st.secrets else st.warning("Image provider setting not found."))
 )
 
@@ -94,7 +94,7 @@ REPLICATE_API_TOKEN = (
 LOCAL_MODEL_ID = os.getenv("LOCAL_MODEL_ID", "stabilityai/sdxl-turbo")
 
 REPLICATE_MODEL_ID = (
-    os.getenv("REPLICATE_MODEL_ID", "black-forest-labs/flux-schnell") or
+    os.getenv("REPLICATE_MODEL_ID") or
     (st.secrets["REPLICATE_MODEL_ID"] if "REPLICATE_MODEL_ID" in st.secrets else st.warning("Replicate model id not found."))
 )
 
