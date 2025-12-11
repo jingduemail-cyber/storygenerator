@@ -8,12 +8,14 @@ from utils.processor import (
     generate_story_title_replicate,
     extract_scenes_and_prompts,
     generate_audio_from_text,
+    generate_audio_from_text_replicate,
     get_r2_client, 
     upload_audio_to_r2, 
     generate_image_for_prompt, 
     create_storybook_pdf_bytes, 
     send_email_with_attachment,
 )
+import time
 
 
 # --- Set up global page formatting and styles ---
@@ -93,20 +95,18 @@ if submitted:
         st.error("Please fill in at least the child's name and your email.")
     else:
         st.success(
-            "Thank you! We’re generating your magical story now. This may take a moment and please do not close this page."
-            "Please expect an email in about 15 minutes. If it's not in your inbox, kindly check your Spam or Promotions folder."
+            "Thank you! We’re generating your magical story now. This may take a moment and please do not close this page. "
+            "Please expect an email in about 5 minutes. If it's not in your inbox, kindly check your Spam or Promotions folder."
         )
         
         with st.spinner("Generating story..."):
             # Build story and title
-            story_text = generate_story_text(child_name, child_age, child_interest, story_objective, your_name)
-            story_title = generate_story_title(text = story_text)
+            # story_text = generate_story_text(child_name, child_age, child_interest, story_objective, your_name)
+            # story_title = generate_story_title(text = story_text)
             
-            # # Test with Replicate text model
-            # story_text = generate_story_text_replicate(child_name, child_age, child_interest, story_objective, your_name) 
-            # story_title = generate_story_title_replicate(text = story_text)
-            
-            
+            # Use Replicate text model
+            story_text = generate_story_text_replicate(child_name, child_age, child_interest, story_objective, your_name) 
+            story_title = generate_story_title_replicate(text = story_text)
             story_title = story_title.strip()
             print(f"Generated story title: {story_title}")
 
@@ -119,13 +119,14 @@ if submitted:
         with st.spinner("Generating story audio..."):
             # story_audio = generate_audio_from_text(story_chunk = "\n\n".join(scenes))
             # story_audio_url = upload_audio_to_r2(audio_bytes = story_audio, filename=f"{story_title.replace(' ', '_')}_audio.mp3")
-            story_audio_url = "www.google.com"  # Temporary for testing
+            story_audio = generate_audio_from_text_replicate(story_chunk = "\n\n".join(scenes))
+            story_audio_url = upload_audio_to_r2(audio_bytes = story_audio, filename=f"{story_title.replace(' ', '_')}_audio.mp3")
             st.success("Audio generation complete!")
             print(f"Uploaded audio URL: {story_audio_url}")
         
         # Cover illustration generation
         cover_prompt = f"Do not include any text in the image. Design a cover illustration for children's book titled '{story_title}'. Do not include any text in the image."
-
+        
         with st.spinner("Generating cover image..."):
             cover_b64 = generate_image_for_prompt(cover_prompt, size="small")
             st.success("Cover image generated.")
@@ -162,7 +163,9 @@ if submitted:
                     f"<p>Hello!</p>"
                     f"<p>We have generated the personalized storybook '{story_title}' for {child_name} in the PDF attachment."
                     f"<br/>Click <a href='{story_audio_url}'>HERE</a> to download the audio book.</p>"
-                    f"<p>✨ Your personalized children storybook is completely <strong>free to enjoy!</strong> Hope you like it!</p>"
+                    f"<p>✨ Your personalized children storybook is completely <strong>free to enjoy!</strong> Hope you like it!"
+                    f"<br/>If you love it and want to support the creator, a small donation would help keep the project growing and allow me to build even more magical features for families.</p>"
+                    f"<p>💛 Support the project: <a href='https://gogetfunding.com/give-a-child-the-gift-of-their-own-story/'>HERE</a>. Every gesture counts and thank you!</p>"
                     f"<p>Best regards,<br/>The StoryGenerator Team</p>"
                 )
 

@@ -14,6 +14,8 @@ secrets.toml
 
 # Ignore archived, wip or testing .py files
 .archives/
+test.py
+*.test.py
 
 # Ignore any pictures generated
 *.png

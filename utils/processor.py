@@ -51,7 +51,7 @@ import time
 import logging
 from multiprocessing import Process, Queue
 import replicate
-
+import requests
 
 
 
@@ -102,6 +102,11 @@ REPLICATE_MODEL_ID = (
 REPLICATE_TEXT_MODEL_ID = (
     os.getenv("REPLICATE_TEXT_MODEL_ID") or
     (st.secrets["REPLICATE_TEXT_MODEL_ID"] if "REPLICATE_TEXT_MODEL_ID" in st.secrets else st.warning("Replicate text model id not found."))
+)
+
+REPLICATE_AUDIO_MODEL_ID = (
+    os.getenv("REPLICATE_AUDIO_MODEL_ID") or
+    (st.secrets["REPLICATE_AUDIO_MODEL_ID"] if "REPLICATE_AUDIO_MODEL_ID" in st.secrets else st.warning("Replicate audio model id not found."))
 )
 
 LOCAL_MAX_SECONDS = float(os.getenv("LOCAL_MAX_SECONDS", "25.0"))
@@ -191,14 +196,15 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         - For child's age from 2 - 4 years old, total scene count should be exactly 3 pages with total word count as close to 75 words as possible.
         - For child's age from 4 - 6 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
         
-        For each scene separated by a line containing only '---'. For each scene:
-        - Provide 2-5 sentences of narrative tailored to {child_age}-old children, incorporating {child_interest} and aligned with the story objective of {story_objective}.
-        - Each scene has preferably 3 lines and maximum 5 lines in the page.
-        - Include one short illustration prompt in parentheses on its own line immediately after the scene text. 
+        For each scene, follow these guidelines strictly:
+        - The scene text includes 2-5 sentences of narrative tailored to {child_age}-old children, incorporating {child_interest} and aligned with the story objective of {story_objective}.
+        - After the scene text, then include one short illustration prompt in parentheses on its own line immediately after the scene text. 
+        - Then immediately, separate each scene (including both the scene text and illustration prompt) with '---' on its own line.
+        - Do not include any language that is not relevant to the scene text and illustration prompt in the generated output. For example, do not include story title, nor any note at the beginning or end relating to word count and how the generated text meets the input requirements.
         
-        For illustration prompts, follow these guidelines:
+        For illustration prompts, follow these guidelines strictly:
         - Each illustration prompt should describe only what each scene appears visually. No text inside the images.
-        - Illustration prompts must always replaces “baby” with “gentle cartoon figure”.
+        - Illustration prompts must always replaces “baby” with “gentle cartoon figure”. This is only applicable in the illustration prompt portion and not in the scene text.
         - Do NOT depict a real person or baby or include the child's name in the illustration prompt.
         - Illustrations of the fictional characters must be consistent throughout the entire scenes.
         - Use soft watercolor children-book illustration style. Gentle pastel colors, round shapes, dreamy warm mood, friendly, safe for children, whimsical, cartoon for all images.
@@ -207,15 +213,20 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         - Scenes should begin with a captivating hook. 
         - Include a gentle problem and a positive resolution. 
         - Make sure the child interests shape the story world and plot.
-
+        
         Adhere to these writing style guidelines:
         - Use clear language suitable for {child_age} children. Keep language simple, warm, and imaginative. 
         - Keep tone warm, soothing, and encouraging.
         - No scary or age-inappropriate content. 
         - No typos and smooth flows.
         
-        Importantly, keep the scene count and word count exactly as specified above. USe simple words and short sentences suitable for {child_age} children.
-        Lastly and very importantly again, strictly follow illustration prompt guidelines mentioned above. Use soft watercolor children-book illustration style. Gentle pastel colors, round shapes, dreamy warm mood, friendly, safe for children, whimsical, cartoon for all images.
+        Importantly, keep the scene count and word count exactly as specified above. Use simple words and short sentences suitable for {child_age} children.
+        Very importantly again, strictly follow the scene guidelines and illustration prompt guidelines mentioned above. 
+        
+        Lastly, strictly adhere to the following instructions for scene formatting, for each scene:
+        - Immediately after the scene text, include one short illustration prompt in parentheses on its own new line. 
+        - Then immediately, separate each scene (including both the scene text and illustration prompt) with '---' on its own new line.
+        - Do not include any language that is not relevant to the scene text and illustration prompt in the generated output, such as story title, or notes at the beginning or end related to word count and how the generated text meets the requirements.
         
         Story starts now:
     """
@@ -253,12 +264,8 @@ def generate_story_text_replicate(child_name, child_age, child_interest, story_o
             REPLICATE_TEXT_MODEL_ID,
             input={
                 "prompt": f"<s>[INST]<<SYS>>{system_prompt}<</SYS>>{user_prompt}[/INST]",
-                "max_new_tokens": 600,
-                "temperature": 0.8,
-                "top_p": 0.9,
-                "presence_penalty": 0.2,
-                "frequency_penalty": 0.2,
-                "min_tokens": 100,
+                "max_tokens": 300,
+                "temperature": 0.7,
             },
         )
 
@@ -288,7 +295,10 @@ def generate_story_title(text: str) -> str:
     return title
 
 def generate_story_title_replicate(text: str) -> str:
-    title_user_prompt = f"Please generate one short catchy storybook title, remember only one title, for this story:\n\n{text}"
+    # Add slow-down between predictions
+    time.sleep(10)  # <-- Automatic pause BEFORE calling Replicate
+    
+    title_user_prompt = f"Please generate one short catchy storybook title, remember only one title, for this story:\n\n{text}. Only return the title itself and nothing else. Strip the title of any quotation marks."
     
     title_system_prompt = (
         "You are a children's storybook writer. Your job is to generate short, "
@@ -300,8 +310,8 @@ def generate_story_title_replicate(text: str) -> str:
             REPLICATE_TEXT_MODEL_ID,
             input={
                 "prompt": f"<s>[INST]<<SYS>>{title_system_prompt}<</SYS>>{title_user_prompt}[/INST]",
-                "max_new_tokens": 60,
-                "temperature": 0.8,
+                "max_tokens": 30,
+                "temperature": 0.7,
             },
         )
 
@@ -343,6 +353,47 @@ def generate_audio_from_text(story_chunk: str) -> str:
         voice="fable",  # or any of the preset voices you choose
     )
     audio_bytes = audio_resp.read()  # audio binary    
+    return audio_bytes
+
+def generate_audio_from_text_replicate(story_chunk: str, speaker="af_heart") -> str:
+    import requests
+    
+    # Add slow-down between predictions
+    time.sleep(10)  # <-- Automatic pause BEFORE calling Replicate
+    
+    audio_resp = replicate.run(
+        REPLICATE_AUDIO_MODEL_ID,
+        input={
+            "text": story_chunk,
+            "speaker": speaker   # optional: "default", "af_heart", "bf_hts", etc.
+        }
+    )
+    
+    # The model returns a URL to the generated audio
+    if isinstance(audio_resp, str):
+        audio_url = audio_resp
+
+    elif isinstance(audio_resp, list):
+        item = audio_resp[0]
+
+        # If the item has a .url attribute, use it (FileOutput-like)
+        if hasattr(item, "url"):
+            audio_url = item.url
+        else:
+            audio_url = item
+
+    # FileOutput-like object directly returned
+    elif hasattr(audio_resp, "url"):
+        audio_url = audio_resp.url
+
+    else:
+        raise ValueError(f"Unrecognized audio output type: {type(audio_resp)}")
+    
+    # Download audio file as binary bytes
+    response = requests.get(audio_url)
+    response.raise_for_status()   # defensive: alert if download fails
+    audio_bytes = response.content
+       
     return audio_bytes
 
 def get_r2_client():
@@ -581,9 +632,10 @@ def generate_images_for_prompts(
         for p in prompts:
             try:
                 print(f"Generating image for prompt: {p}")
+                time.sleep(10)  # to avoid rate limits
                 img = _generate_replicate(p, width, height, prompt_strength)
                 out.append(_pil_to_b64(img))
-                time.sleep(10)  # to avoid rate limits
+                time.sleep(5)  # to avoid rate limits
                 
             except:
                 out.append(_BLANK_PNG_B64)
