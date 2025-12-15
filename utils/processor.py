@@ -195,6 +195,7 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         - For child's age from 0 - 2 years old, total scene count should be exactly 2 pages with total word count as close to 50 words as possible. 
         - For child's age from 2 - 4 years old, total scene count should be exactly 3 pages with total word count as close to 75 words as possible.
         - For child's age from 4 - 6 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
+        - For child's age above 6 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
         
         For each scene, follow these guidelines strictly:
         - The scene text includes 2-5 sentences of narrative tailored to {child_age}-old children, incorporating {child_interest} and aligned with the story objective of {story_objective}.
@@ -205,8 +206,6 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         
         For illustration prompts, follow these guidelines strictly:
         - Each illustration prompt should describe only what each scene appears visually. No text inside the images.
-        - Illustration prompts must always replaces “baby” with “gentle cartoon figure”. This is only applicable in the illustration prompt portion and not in the scene text.
-        - Do NOT depict a real person or baby or include the child's name in the illustration prompt.
         - Illustrations of the fictional characters must be consistent throughout the entire scenes.
         - Use soft watercolor children-book illustration style. Gentle pastel colors, round shapes, dreamy warm mood, friendly, safe for children, whimsical, cartoon for all images.
 
