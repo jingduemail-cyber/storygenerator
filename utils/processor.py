@@ -200,7 +200,8 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         - The scene text includes 2-5 sentences of narrative tailored to {child_age}-old children, incorporating {child_interest} and aligned with the story objective of {story_objective}.
         - After the scene text, then include one short illustration prompt in parentheses on its own line immediately after the scene text. 
         - Then immediately, separate each scene (including both the scene text and illustration prompt) with '---' on its own line.
-        - Do not include any language that is not relevant to the scene text and illustration prompt in the generated output. For example, do not include story title, nor any note at the beginning or end relating to word count and how the generated text meets the input requirements.
+        - Do not include any language that is not relevant to the scene text and illustration prompt in the generated output. 
+        - Do not include story title, nor any note at the beginning or end relating to word count and how the generated text meets the input requirements, or text like "Here is the personalized storybook for...".
         
         For illustration prompts, follow these guidelines strictly:
         - Each illustration prompt should describe only what each scene appears visually. No text inside the images.
@@ -220,10 +221,12 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         - No scary or age-inappropriate content. 
         - No typos and smooth flows.
         
-        Importantly, keep the scene count and word count exactly as specified above. Use simple words and short sentences suitable for {child_age} children.
+        Importantly, keep the scene / page count and word count exactly as specified above. Use simple words and short sentences suitable for {child_age} children.
         Very importantly again, strictly follow the scene guidelines and illustration prompt guidelines mentioned above. 
         
         Lastly, strictly adhere to the following instructions for scene formatting, for each scene:
+        - For children under 2 (two) years old, ONLY produce 2 (two) scenes or pages. And each scene text should be approximately 25 words.
+        - Do not include any text other than the scene text and illustration prompt, such as title or introductory text for example "Here is the personalized storybook for...".
         - Immediately after the scene text, include one short illustration prompt in parentheses on its own new line. 
         - Then immediately, separate each scene (including both the scene text and illustration prompt) with '---' on its own new line.
         - Do not include any language that is not relevant to the scene text and illustration prompt in the generated output, such as story title, or notes at the beginning or end related to word count and how the generated text meets the requirements.
@@ -296,7 +299,7 @@ def generate_story_title(text: str) -> str:
 
 def generate_story_title_replicate(text: str) -> str:
     # Add slow-down between predictions
-    time.sleep(10)  # <-- Automatic pause BEFORE calling Replicate
+    time.sleep(15)  # <-- Automatic pause BEFORE calling Replicate
     
     title_user_prompt = f"Please generate one short catchy storybook title, remember only one title, for this story:\n\n{text}. Only return the title itself and nothing else. Strip the title of any quotation marks."
     
@@ -359,7 +362,7 @@ def generate_audio_from_text_replicate(story_chunk: str, speaker="af_heart") -> 
     import requests
     
     # Add slow-down between predictions
-    time.sleep(10)  # <-- Automatic pause BEFORE calling Replicate
+    time.sleep(15)  # <-- Automatic pause BEFORE calling Replicate
     
     audio_resp = replicate.run(
         REPLICATE_AUDIO_MODEL_ID,
@@ -632,10 +635,10 @@ def generate_images_for_prompts(
         for p in prompts:
             try:
                 print(f"Generating image for prompt: {p}")
-                time.sleep(10)  # to avoid rate limits
+                time.sleep(15)  # to avoid rate limits
                 img = _generate_replicate(p, width, height, prompt_strength)
                 out.append(_pil_to_b64(img))
-                time.sleep(5)  # to avoid rate limits
+                time.sleep(15)  # to avoid rate limits
                 
             except:
                 out.append(_BLANK_PNG_B64)
