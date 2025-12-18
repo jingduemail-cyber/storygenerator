@@ -82,6 +82,12 @@ FROM_EMAIL = (
 # -------------------------------------------------------------
 # Config & defaults
 # -------------------------------------------------------------
+OPENROUTER_API_KEY = (
+    os.getenv("OPENROUTER_API_KEY") or
+    (st.secrets["OPENROUTER_API_KEY"] if "OPENROUTER_API_KEY" in st.secrets else st.warning("OpenRouter API key not found."))
+)
+
+
 IMAGE_PROVIDER = (
     os.getenv("IMAGE_PROVIDER") or
     (st.secrets["IMAGE_PROVIDER"] if "IMAGE_PROVIDER" in st.secrets else st.warning("Image provider setting not found."))
@@ -192,13 +198,14 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         Story objective: {story_objective}
         
         For total scene count and word count, strictly follow these guidelines based on the child's age {child_age}:
-        - For child's age from 0 - 2 years old, total scene count should be exactly 2 pages with total word count as close to 50 words as possible. 
-        - For child's age from 2 - 4 years old, total scene count should be exactly 3 pages with total word count as close to 75 words as possible.
-        - For child's age from 4 - 6 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
-        - For child's age above 6 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
+        - For child's age from 0 - 2 years old, total scene count should be exactly 2 pages with total word count as close to 40 words as possible. 
+        - For child's age from 2 - 4 years old, total scene count should be exactly 3 pages with total word count as close to 60 words as possible.
+        - For child's age from 4 - 6 years old, total scene count should be exactly 3 pages with total word count as close to 60 words as possible.
+        - For child's age above 6 years old, total scene count should be exactly 3 pages with total word count as close to 60 words as possible.
         
         For each scene, follow these guidelines strictly:
         - The scene text includes 2-5 sentences of narrative tailored to {child_age}-old children, incorporating {child_interest} and aligned with the story objective of {story_objective}.
+        - Keep the scene text simple, warm, and imaginative, language appropriate and easy enough for {child_age}-year-olds.
         - After the scene text, then include one short illustration prompt in parentheses on its own line immediately after the scene text. 
         - Then immediately, separate each scene (including both the scene text and illustration prompt) with '---' on its own line.
         - Do not include any language that is not relevant to the scene text and illustration prompt in the generated output. 
@@ -206,6 +213,7 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         
         For illustration prompts, follow these guidelines strictly:
         - Each illustration prompt should describe only what each scene appears visually. No text inside the images.
+        - Include in each illustration prompt that it is for storybook illustration, full-bleed composition, wide scene, background extends to edges, no border, no frame, no white margins, soft pastel watercolor style.
         - Illustrations of the fictional characters must be consistent throughout the entire scenes.
         - Use soft watercolor children-book illustration style. Gentle pastel colors, round shapes, dreamy warm mood, friendly, safe for children, whimsical, cartoon for all images.
 
@@ -229,6 +237,9 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         - Immediately after the scene text, include one short illustration prompt in parentheses on its own new line. 
         - Then immediately, separate each scene (including both the scene text and illustration prompt) with '---' on its own new line.
         - Do not include any language that is not relevant to the scene text and illustration prompt in the generated output, such as story title, or notes at the beginning or end related to word count and how the generated text meets the requirements.
+        - Remember to separate each scene (including both the scene text and illustration prompt) with '---' on its own line.
+        - Remember to include one short illustration prompt in parentheses on its own new line immediately after the scene text for each scene.
+        - Remember to include in each illustration prompt that it is for storybook illustration, full-bleed composition, wide scene, background extends to edges, no border, no frame, no white margins, soft pastel watercolor style.
         
         Story starts now:
     """
@@ -281,6 +292,46 @@ def generate_story_text_replicate(child_name, child_age, child_interest, story_o
 
     except Exception as e:
         return f"ERROR generating story: {e}"
+
+# Generate story text using OpenRouter API
+def generate_story_text_openrouter(child_name, child_age, child_interest, story_objective, your_name):
+    user_prompt = build_story_prompt(child_name, child_age, child_interest, story_objective, your_name)
+    
+    system_prompt = (
+        "You are a children's storybook writer. Your job is to write warm, gentle, "
+        "imaginative stories suitable for young children. Use soft pacing, simple vocabulary, "
+        "and emotional clarity. Avoid scary elements, violence, or complex plots. "
+        "Use pastel, dreamlike imagery. Keep tone uplifting and magical."
+    )
+    
+    url = "https://openrouter.ai/api/v1/chat/completions"
+
+    headers = {
+        "Authorization": "Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://storygenerator-madeforeveryone.streamlit.app/",
+        "X-Title": "Personalized Children Storybook Generator",
+    }
+
+    payload = {
+        "model": "qwen/qwen3-235b-a22b",
+        "prompt": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "temperature": 0.7,
+        "max_tokens": 800
+    }
+
+    response = requests.post(url, headers=headers, json=payload, timeout=60)
+    response.raise_for_status()
+    data = response.json()
+    story_text = data["choices"][0]["message"]["content"]
+    
+    return story_text
+    
+    
+
 
 
 def generate_story_title(text: str) -> str:
@@ -459,6 +510,10 @@ def _strengthen_prompt(prompt: str, strength: float) -> str:
     anchor = (
         "Soft watercolor children-book illustration. Gentle pastel colors, "
         "round shapes, dreamy warm mood."
+        "Full-bleed storybook illustration, wide cinematic composition, "
+        "Background extends to all edges, no border, no frame."
+        "soft painted background with subtle texture, light clouds, foliage, or abstract shapes filling the scene."
+        "The main character has the same appearance across pages: round face, simple dot eyes, soft outlines, consistent clothing colors."
     )
     repeats = min(3, int(round((strength - 1.0) * 2)))
     return f"{anchor} " + " ".join([anchor] * repeats) + " " + prompt
@@ -577,7 +632,7 @@ def _generate_replicate(prompt, width, height, strength):
     )
 
     url = output[0] if isinstance(output, list) else output
-    img = PILImage.open(io.BytesIO(requests.get(url).content)).convert("RGBA")
+    img = PILImage.open(io.BytesIO(requests.get(url).content)).convert("RGB")
     return img
 
 
@@ -622,6 +677,7 @@ def generate_images_for_prompts(
             )
 
         if imgs is None:
+            print("Local generation failed, returning blank images.")
             return [_BLANK_PNG_B64 for _ in prompts]
 
         return [_pil_to_b64(img) for img in imgs]
@@ -636,8 +692,10 @@ def generate_images_for_prompts(
                 print(f"Generating image for prompt: {p}")
                 time.sleep(15)  # to avoid rate limits
                 img = _generate_replicate(p, width, height, prompt_strength)
+                print(f"Checkpoint 1 - Generated image successfully.")
                 out.append(_pil_to_b64(img))
                 time.sleep(15)  # to avoid rate limits
+                print(f"Checkpoint 2 - Generated image successfully.")
                 
             except:
                 out.append(_BLANK_PNG_B64)
@@ -651,7 +709,7 @@ def generate_images_for_prompts(
 # -------------------------------------------------------------
 # SINGLE IMAGE (backwards compatible)
 # -------------------------------------------------------------
-def generate_image_for_prompt(prompt: str, size: str = "small") -> str:
+def generate_image_for_prompt(prompt: str, size: str = "storybook") -> str:
     if not prompt:
         print("No prompt provided, returning blank image.")
         return _BLANK_PNG_B64
@@ -662,6 +720,7 @@ def generate_image_for_prompt(prompt: str, size: str = "small") -> str:
         "small": FALLBACK_SIZE,
         # "medium": DEFAULT_SIZE,
         "large": (1024, 1024),
+        "storybook": (1152, 648),
     }
     width, height = size_map.get(size, DEFAULT_SIZE)
     print(f"Selected size: {size} ({width}x{height})")
@@ -672,6 +731,8 @@ def generate_image_for_prompt(prompt: str, size: str = "small") -> str:
         prompt_strength=DEFAULT_PROMPT_STRENGTH,
         prefer_size=(width, height),
     )
+    print(f"Generated image successfully.")
+    
     return result[0]
 
 
@@ -722,41 +783,6 @@ def fit_paragraph_to_box(text: str, box_width: float, box_height: float, style: 
     final_style = ParagraphStyle(name=f"tmp_min", parent=style, fontSize=min_font, leading=int(min_font * 1.2))
     return Paragraph(text.replace('\n', '<br/>'), final_style)
 
-# QR code generation function - not used currently
-def generate_qr_code(url: str):
-    """
-    Convert URL into a QR code ReportLab Image().
-    """
-    qr = qrcode.QRCode(box_size=8, border=1)
-    qr.add_data(url)
-    qr.make(fit=True)
-
-    qr_pil = qr.make_image(fill_color="black", back_color="white").convert("RGB")
-    img_buffer = io.BytesIO()
-    qr_pil.save(img_buffer, format="PNG")
-    img_buffer.seek(0)
-
-    # Convert into ReportLab Image
-    qr_rl = RLImage(img_buffer, width=150, height=150)
-    return qr_rl
-
-# Compress base64 image - not used currently
-def compress_image(image_b64, quality=70):
-    img_bytes = io.BytesIO(base64.b64decode(image_b64))
-    img = PILImage.open(img_bytes)
-    
-    # If PNG has alpha channel (RGBA), convert safely
-    if img.mode == "RGBA":
-        background = PILImage.new("RGB", img.size, (255, 255, 255))
-        background.paste(img, mask=img.split()[3])  # apply alpha channel
-        img = background
-    else:
-        img = img.convert("RGB")
-
-    compressed = io.BytesIO()
-    img.save(compressed, format="JPEG", optimize=True, quality=quality)
-    return compressed.getvalue()
-
 # Create PDF with full-spread artwork
 def create_storybook_pdf_bytes(
     title: str,
@@ -783,6 +809,81 @@ def create_storybook_pdf_bytes(
     )
 
     story = []
+    
+    # -------------------------
+    # Cover page flowable
+    # -------------------------
+    class CoverFlowable(Flowable):
+        """
+        Single-page cover:
+        - Title + author at top
+        - Full-width cover image below
+        """
+
+        def __init__(self, title, author, img_b64):
+            super().__init__()
+            self.title = title
+            self.author = author
+            self.img_b64 = img_b64
+
+        def wrap(self, availWidth, availHeight):
+            self.width = availWidth
+            self.height = availHeight
+            return availWidth, availHeight
+
+        def draw(self):
+            c = self.canv
+            w, h = self.width, self.height
+
+            # --- Title ---
+            title_style = COVER_TITLE_STYLE
+            title_para = Paragraph(self.title, title_style)
+            tw, th = title_para.wrap(w * 0.9, h)
+            title_para.drawOn(c, (w - tw) / 2, h - th - 40)
+
+            # --- Author ---
+            author_style = COVER_AUTHOR_STYLE
+            author_para = Paragraph(f"By {self.author}", author_style)
+            aw, ah = author_para.wrap(w * 0.9, h)
+            author_para.drawOn(c, (w - aw) / 2, h - th - ah - 55)
+
+            # --- Image area ---
+            top_reserved = th + ah + 90
+            image_area_h = h - top_reserved - 40
+
+            if not self.img_b64:
+                return
+
+            try:
+                # Decode image safely
+                pil_img = PILImage.open(
+                    io.BytesIO(base64.b64decode(self.img_b64))
+                ).convert("RGB")
+
+                buf = io.BytesIO()
+                pil_img.save(buf, format="PNG")
+                buf.seek(0)
+
+                rlimg = RLImage(buf)
+
+                iw, ih = rlimg.imageWidth, rlimg.imageHeight
+                scale = min(w / iw, image_area_h / ih)
+                draw_w = iw * scale
+                draw_h = ih * scale
+
+                x = (w - draw_w) / 2
+                y = 30  # bottom padding
+
+                rlimg.drawWidth = draw_w
+                rlimg.drawHeight = draw_h
+                rlimg.drawOn(c, x, y)
+
+            except Exception as e:
+                logging.error(f"Cover image draw failed: {e}")
+
+    
+    
+    
     
     # -------------------------
     # SpreadFlowable (fixed)
@@ -817,10 +918,11 @@ def create_storybook_pdf_bytes(
             Returns (draw_w, draw_h, draw_x, draw_y).
             """
             if not image_b64:
+                print("No image data provided.")
                 return 0, 0, 0, 0
             try:
                 img_buf = io.BytesIO(base64.b64decode(image_b64))
-                rlimg = RLImage(img_buf)
+                rlimg = RLImage(img_buf)                
                 iw, ih = rlimg.imageWidth, rlimg.imageHeight
                 if iw <= 0 or ih <= 0:
                     return 0, 0, 0, 0
@@ -837,6 +939,7 @@ def create_storybook_pdf_bytes(
                 rlimg.drawOn(c, draw_x, draw_y)
                 return draw_w, draw_h, draw_x, draw_y
             except Exception:
+                print("Failed to draw image in box.")
                 return 0, 0, 0, 0
 
         def draw(self):
@@ -905,18 +1008,20 @@ def create_storybook_pdf_bytes(
     # Build the flow: cover -> scenes 
     # -----------------------------------------------------------------
 
-    # --- Cover: full-spread cover image plus title + author    
-    # Add cover page title + author
-    story.append(Spacer(1, 2 * inch))
-    story.append(Paragraph(title, COVER_TITLE_STYLE))
-    story.append(Spacer(1, 0.5 * inch))
-    story.append(Paragraph(f"By {author}", COVER_AUTHOR_STYLE))
+    # --- Cover: full-spread cover image plus title + author   
+    story.append(CoverFlowable(title, author, cover_image_b64))
     story.append(PageBreak())
+ 
+    # # Add cover page title + author
+    # story.append(Spacer(1, 2 * inch))
+    # story.append(Paragraph(title, COVER_TITLE_STYLE))
+    # story.append(Spacer(1, 0.5 * inch))
+    # story.append(Paragraph(f"By {author}", COVER_AUTHOR_STYLE))
+    # story.append(PageBreak())
     
-    # Add cover image spread
-    story.append(SpreadFlowable(img_b64=cover_image_b64, text=None)) # Previous version
-    # story.append(RLImage("cover_image.png", width=600, height=400)) # Testing this using RLImage
-    story.append(PageBreak())
+    # # Add cover image spread
+    # story.append(SpreadFlowable(img_b64=cover_image_b64, text=None))
+    # story.append(PageBreak())
 
     # --- Scenes: use images_b64 and scenes lists (iterate by index)
     # We'll display one spread per image/text pair; be tolerant of unequal lengths.

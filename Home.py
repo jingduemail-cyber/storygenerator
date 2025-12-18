@@ -6,6 +6,7 @@ from utils.processor import (
     generate_story_text_replicate, 
     generate_story_title, 
     generate_story_title_replicate,
+    generate_story_text_openrouter,
     extract_scenes_and_prompts,
     generate_audio_from_text,
     generate_audio_from_text_replicate,
@@ -128,14 +129,14 @@ if submitted:
         cover_prompt = f"Do not include any text in the image. Design a cover illustration for children's book titled '{story_title}'. Do not include any text in the image."
         
         with st.spinner("Generating cover image..."):
-            cover_b64 = generate_image_for_prompt(cover_prompt, size="small")
+            cover_b64 = generate_image_for_prompt(cover_prompt, size="storybook")
             st.success("Cover image generated.")
 
         # Generate each scene image
         images_b64 = []
         with st.spinner("Generating scene images..."):
             for p in prompts:
-                img_b64 = generate_image_for_prompt(p, size="small")            
+                img_b64 = generate_image_for_prompt(p, size="storybook")            
                 images_b64.append(img_b64)
         
         st.success("Scene images generated.")
