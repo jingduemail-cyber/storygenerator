@@ -232,7 +232,6 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         Very importantly again, strictly follow the scene guidelines and illustration prompt guidelines mentioned above. 
         
         Lastly, strictly adhere to the following instructions for scene formatting, for each scene:
-        - For children under 2 (two) years old, ONLY produce 2 (two) scenes or pages. And each scene text should be approximately 25 words.
         - Do not include any text other than the scene text and illustration prompt, such as title or introductory text for example "Here is the personalized storybook for...".
         - Immediately after the scene text, include one short illustration prompt in parentheses on its own new line. 
         - Then immediately, separate each scene (including both the scene text and illustration prompt) with '---' on its own new line.
