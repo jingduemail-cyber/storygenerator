@@ -102,14 +102,13 @@ if submitted:
         
         with st.spinner("Generating story..."):
             # Build story and title
-            # story_text = generate_story_text(child_name, child_age, child_interest, story_objective, your_name)
-            # story_title = generate_story_title(text = story_text)
+            story_text = generate_story_text(child_name, child_age, child_interest, story_objective, your_name)
+            story_title = generate_story_title(text = story_text)
             
-            # Use Replicate text model
-            story_text = generate_story_text_replicate(child_name, child_age, child_interest, story_objective, your_name) 
-            story_title = generate_story_title_replicate(text = story_text)
+            # # Use Replicate text model
+            # story_text = generate_story_text_replicate(child_name, child_age, child_interest, story_objective, your_name) 
+            # story_title = generate_story_title_replicate(text = story_text)
             story_title = story_title.strip()
-            print(f"Generated story title: {story_title}")
 
             # Extract scenes and illustration prompts
             scenes, prompts = extract_scenes_and_prompts(story_text)

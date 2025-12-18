@@ -329,10 +329,6 @@ def generate_story_text_openrouter(child_name, child_age, child_interest, story_
     story_text = data["choices"][0]["message"]["content"]
     
     return story_text
-    
-    
-
-
 
 def generate_story_title(text: str) -> str:
     response = openai_client.chat.completions.create(
