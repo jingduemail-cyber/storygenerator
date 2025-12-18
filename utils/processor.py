@@ -198,10 +198,10 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         Story objective: {story_objective}
         
         For total scene count and word count, strictly follow these guidelines based on the child's age {child_age}:
-        - For child's age from 0 - 2 years old, total scene count should be exactly 2 pages with total word count as close to 40 words as possible. 
-        - For child's age from 2 - 4 years old, total scene count should be exactly 3 pages with total word count as close to 60 words as possible.
-        - For child's age from 4 - 6 years old, total scene count should be exactly 3 pages with total word count as close to 60 words as possible.
-        - For child's age above 6 years old, total scene count should be exactly 3 pages with total word count as close to 60 words as possible.
+        - For child's age from 0 - 2 years old, total scene count should be exactly 3 pages with total word count as close to 75 words as possible. 
+        - For child's age from 2 - 4 years old, total scene count should be exactly 3 pages with total word count as close to 75 words as possible.
+        - For child's age from 4 - 6 years old, total scene count should be exactly 3 pages with total word count as close to 75 words as possible.
+        - For child's age above 6 years old, total scene count should be exactly 3 pages with total word count as close to 75 words as possible.
         
         For each scene, follow these guidelines strictly:
         - The scene text includes 2-5 sentences of narrative tailored to {child_age}-old children, incorporating {child_interest} and aligned with the story objective of {story_objective}.
@@ -240,6 +240,7 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         - Remember to separate each scene (including both the scene text and illustration prompt) with '---' on its own line.
         - Remember to include one short illustration prompt in parentheses on its own new line immediately after the scene text for each scene.
         - Remember to include in each illustration prompt that it is for storybook illustration, full-bleed composition, wide scene, background extends to edges, no border, no frame, no white margins, soft pastel watercolor style.
+        - Remember that do not include any text other than the scene text and illustration prompt, such as "Here is the personalized storybook for..." in scene texts.
         
         Story starts now:
     """
