@@ -24,6 +24,7 @@ from dotenv import find_dotenv, load_dotenv
 import streamlit as st
 from streamlit_extras.switch_page_button import switch_page
 from openai import OpenAI
+from openai import APIConnectionError, APIError, RateLimitError, Timeout
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Attachment, FileContent, FileName, FileType, Disposition
 from reportlab.platypus import (
@@ -198,10 +199,10 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         Story objective: {story_objective}
         
         For total scene count and word count, strictly follow these guidelines based on the child's age {child_age}:
-        - For child's age from 0 - 2 years old, total scene count should be exactly 3 pages with total word count as close to 75 words as possible. 
-        - For child's age from 2 - 4 years old, total scene count should be exactly 3 pages with total word count as close to 75 words as possible.
-        - For child's age from 4 - 6 years old, total scene count should be exactly 3 pages with total word count as close to 75 words as possible.
-        - For child's age above 6 years old, total scene count should be exactly 3 pages with total word count as close to 75 words as possible.
+        - For child's age from 0 - 2 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible. 
+        - For child's age from 2 - 4 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
+        - For child's age from 4 - 6 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
+        - For child's age above 6 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
         
         For each scene, follow these guidelines strictly:
         - The scene text includes 2-5 sentences of narrative tailored to {child_age}-old children, incorporating {child_interest} and aligned with the story objective of {story_objective}.
@@ -214,8 +215,11 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         For illustration prompts, follow these guidelines strictly:
         - Each illustration prompt should describe only what each scene appears visually. No text inside the images.
         - Include in each illustration prompt that it is for storybook illustration, full-bleed composition, wide scene, background extends to edges, no border, no frame, no white margins, soft pastel watercolor style.
-        - Illustrations of the fictional characters must be consistent throughout the entire scenes.
-        - Use soft watercolor children-book illustration style. Gentle pastel colors, round shapes, dreamy warm mood, friendly, safe for children, whimsical, cartoon for all images.
+        - Illustrations of the fictional characters must be consistent throughout the entire scenes. The main character has the same appearance across pages: round face, simple dot eyes, soft outlines, consistent clothing colors.
+        - Soft watercolor children-book illustration style. Gentle pastel color palette with soft blues, mint greens, lavender, and light peach.
+        - Balanced neutral lighting, calm and soothing mood. No golden yellow, orange, or sepia color cast.
+        - Round shapes, friendly, safe for children. Whimsical, soft cartoon style. Daylight white balance.
+        - Do not depict any real or identifiable person, nor mention any children name in the prompt. Create fully fictional, stylized cartoon characters with no realistic human features.
 
         Follow these for the story guidelines:
         - Scenes should begin with a captivating hook. 
@@ -269,7 +273,7 @@ def generate_story_text_replicate(child_name, child_age, child_interest, story_o
         "You are a children's storybook writer. Your job is to write warm, gentle, "
         "imaginative stories suitable for young children. Use soft pacing, simple vocabulary, "
         "and emotional clarity. Avoid scary elements, violence, or complex plots. "
-        "Use pastel, dreamlike imagery. Keep tone uplifting and magical."
+        "Use soft pastel, dreamlike imagery. Keep tone uplifting and magical."
     )
     
     try:
@@ -301,7 +305,7 @@ def generate_story_text_openrouter(child_name, child_age, child_interest, story_
         "You are a children's storybook writer. Your job is to write warm, gentle, "
         "imaginative stories suitable for young children. Use soft pacing, simple vocabulary, "
         "and emotional clarity. Avoid scary elements, violence, or complex plots. "
-        "Use pastel, dreamlike imagery. Keep tone uplifting and magical."
+        "Use soft pastel, dreamlike imagery. Keep tone uplifting and magical."
     )
     
     url = "https://openrouter.ai/api/v1/chat/completions"
@@ -504,12 +508,13 @@ def _strengthen_prompt(prompt: str, strength: float) -> str:
     if strength <= 1.0:
         return prompt
     anchor = (
-        "Soft watercolor children-book illustration. Gentle pastel colors, "
-        "round shapes, dreamy warm mood."
+        "Soft watercolor children-book illustration style. Gentle pastel color palette with soft blues, mint greens, lavender, and light peach."
+        "Balanced neutral lighting, calm and soothing mood. No golden yellow, orange, or sepia color cast."
+        "Round shapes, friendly, safe for children. Whimsical, soft cartoon style. Daylight white balance."
         "Full-bleed storybook illustration, wide cinematic composition, "
         "Background extends to all edges, no border, no frame."
         "soft painted background with subtle texture, light clouds, foliage, or abstract shapes filling the scene."
-        "The main character has the same appearance across pages: round face, simple dot eyes, soft outlines, consistent clothing colors."
+        "The main character has the same appearance across pages: round face, simple dot eyes, same hair length and style, soft outlines, consistent clothing colors."
     )
     repeats = min(3, int(round((strength - 1.0) * 2)))
     return f"{anchor} " + " ".join([anchor] * repeats) + " " + prompt
@@ -631,6 +636,22 @@ def _generate_replicate(prompt, width, height, strength):
     img = PILImage.open(io.BytesIO(requests.get(url).content)).convert("RGB")
     return img
 
+# -------------------------------------------------------------
+# OPENAI PROVIDER
+# -------------------------------------------------------------
+def _generate_openai(prompt: str, width, height, strength=DEFAULT_PROMPT_STRENGTH) -> str:
+    """Return base64 PNG string from OpenAI image generation."""
+    prompt = _strengthen_prompt(prompt, strength=DEFAULT_PROMPT_STRENGTH)
+    size = f"{width}x{height}"
+    resp = openai_client.images.generate(
+        model="gpt-image-1-mini",
+        prompt=prompt,
+        size=size,
+        n=1,
+    )
+    b64 = resp.data[0].b64_json
+    return b64
+
 
 # -------------------------------------------------------------
 # PUBLIC BATCH API
@@ -697,7 +718,25 @@ def generate_images_for_prompts(
                 out.append(_BLANK_PNG_B64)
                 print(f"Failed to generate image for prompt: {p} and returned blank image.")
         return out
+    
+    # ---------------------------------------------------------
+    # OPENAI MODE
+    # ---------------------------------------------------------
+    elif IMAGE_PROVIDER == "openai":
+        out = []
+        for p in prompts:
+            try:
+                print(f"Generating image for prompt: {p}")
+                time.sleep(15)  # to avoid rate limits
+                img = _generate_openai(p, width, height, strength=DEFAULT_PROMPT_STRENGTH)
+                print(f"Checkpoint openai - Generated image successfully.")
+                out.append(img)
+            except:
+                out.append(_BLANK_PNG_B64)
+                print(f"Failed to generate image for prompt: {p} and returned blank image.")
+        return out
 
+    # Else: unknown provider
     else:
         raise ValueError(f"Unknown IMAGE_PROVIDER: {IMAGE_PROVIDER}")
 
@@ -721,6 +760,7 @@ def generate_image_for_prompt(prompt: str, size: str = "storybook") -> str:
     width, height = size_map.get(size, DEFAULT_SIZE)
     print(f"Selected size: {size} ({width}x{height})")
     print(f"Generating single image with size: {size} ({width}x{height})")
+    print(f"Using IMAGE_PROVIDER: {IMAGE_PROVIDER}")
 
     result = generate_images_for_prompts(
         [prompt],
@@ -731,6 +771,33 @@ def generate_image_for_prompt(prompt: str, size: str = "storybook") -> str:
     
     return result[0]
 
+# Image generation with OpenAI Image API
+def generate_image_for_prompt_openai(prompt: str, size="1536x1024", retries=3) -> str:
+    if not prompt:
+        print("No prompt provided, returning blank image.")
+        return _BLANK_PNG_B64
+
+    prompt = _strengthen_prompt(prompt, strength=DEFAULT_PROMPT_STRENGTH)
+
+    for attempt in range(retries):
+        try:
+            resp = openai_client.images.generate(
+                model="gpt-image-1-mini",
+                prompt=prompt,
+                size=size,
+                n=1,
+            )
+            print(f"Generated image successfully.")
+            result = resp.data[0].b64_json   
+            return result
+        
+        except APIConnectionError as e:
+            wait = 2 ** attempt
+            print(f"OpenAI connection error, retrying in {wait}s...")
+            time.sleep(wait)
+            
+    print("OpenAI image generation failed after retries.")
+    return _BLANK_PNG_B64
 
 
 

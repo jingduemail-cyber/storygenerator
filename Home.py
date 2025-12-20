@@ -13,6 +13,7 @@ from utils.processor import (
     get_r2_client, 
     upload_audio_to_r2, 
     generate_image_for_prompt, 
+    generate_image_for_prompt_openai,
     create_storybook_pdf_bytes, 
     send_email_with_attachment,
 )
@@ -125,17 +126,19 @@ if submitted:
             print(f"Uploaded audio URL: {story_audio_url}")
         
         # Cover illustration generation
-        cover_prompt = f"Do not include any text in the image. Design a cover illustration for children's book titled '{story_title}'. Do not include any text in the image."
+        cover_prompt = f"Do not include any text in the image. Design a children's storybook cover illustration related to the topic of '{child_interest}'. Do not include any text or human-like characters in the image."
         
         with st.spinner("Generating cover image..."):
-            cover_b64 = generate_image_for_prompt(cover_prompt, size="storybook")
+            # cover_b64 = generate_image_for_prompt(cover_prompt, size="storybook")
+            cover_b64 = generate_image_for_prompt_openai(cover_prompt)
             st.success("Cover image generated.")
 
         # Generate each scene image
         images_b64 = []
         with st.spinner("Generating scene images..."):
             for p in prompts:
-                img_b64 = generate_image_for_prompt(p, size="storybook")            
+                # img_b64 = generate_image_for_prompt(p, size="storybook") 
+                img_b64 = generate_image_for_prompt_openai(p)
                 images_b64.append(img_b64)
         
         st.success("Scene images generated.")
