@@ -18,14 +18,29 @@ from utils.processor import (
     send_email_with_attachment,
 )
 import time
+from utils.ui import render_top_bar, get_app_title
+from utils.language.loader import get_language
+from pathlib import Path
 
+PAGE_ID = "home"
+
+if "lang" not in st.session_state:
+    st.session_state.lang = "en"
+
+params = st.query_params
+
+if "lang" in params:
+    st.session_state.lang = params["lang"]
+
+T = get_language(st.session_state.lang)
 
 # --- Set up global page formatting and styles ---
 st.set_page_config(
-    page_title="Personalized Storybook Generator",
-    page_icon="📚",
+    page_title=get_app_title(T, PAGE_ID),
     layout="centered"
 )
+
+render_top_bar(T, PAGE_ID)
 
 # Global CSS for clean, modern UI
 st.markdown("""
@@ -51,8 +66,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-import streamlit as st
-
 # Inject CSS to style placeholder + input
 st.markdown("""
 <style>
@@ -71,81 +84,56 @@ input {
 """, unsafe_allow_html=True)
 
 # --- Set up home and user intake page ---
-st.set_page_config(page_title="Storybook Generator", page_icon="📘")
-
-# Optional global styling
-st.markdown("<h1 class='main-title'>📘 Personalized Storybook Generator</h1>", unsafe_allow_html=True)
-st.markdown("<p class='subtitle'>Create a magical, personalized storybook for your child</p>", unsafe_allow_html=True)
-
 st.write("---")
-
-st.header("✨ Create Your Storybook")
-st.write("Please fill in ALL details below. You will receive the final storybook by email.")
+st.write(T["ui"]["instructions"])
 
 with st.form(key="story_form"):
-    st.header("Story Inputs")
-    child_name = st.text_input("Child's Name", placeholder="Enter the child's name...")
-    child_age = st.text_input("Child's Age", placeholder="Example - 3 months old...")
-    child_interest = st.text_input("Child's Interests", placeholder="Example - space, robots, friendship...")
-    story_objective = st.text_area("Story Objective", placeholder="Example - encourage curiosity and kindness...")
-    your_name = st.text_input("Author Name", placeholder="Example - Mom & Dad")
-    recipient_email = st.text_input("Author Email", placeholder="Enter your email to receive the storybook...")
-    submitted = st.form_submit_button("Generate Storybook")
+    child_name = st.text_input(T["ui"]["child_name"])
+    child_age = st.text_input(T["ui"]["child_age"])
+    child_interest = st.text_input(T["ui"]["interests"])
+    story_objective = st.text_area(T["ui"]["objective"])
+    your_name = st.text_input(T["ui"]["author_name"])
+    recipient_email = st.text_input(T["ui"]["email"])
+    submitted = st.form_submit_button(T["ui"]["generate"])
 
 if submitted:
     if not recipient_email or not child_name:
-        st.error("Please fill in at least the child's name and your email.")
+        st.error(T["ui"]["error_missing_fields"])
     else:
-        st.success(
-            "Thank you! We’re generating your magical story now. This may take a moment and please do not close this page. "
-            "Please expect an email in about 5 minutes. If it's not in your inbox, kindly check your Spam or Promotions folder."
-        )
+        st.success(T["ui"]["submit_success"])
         
-        with st.spinner("Generating story..."):
+        intake = {
+        "child_name": child_name,
+        "child_age": child_age,
+        "child_interest": child_interest,
+        "story_objective": story_objective,
+        "your_name": your_name,
+        "recipient_email": recipient_email,
+        "language": st.session_state.lang
+        }
+        
+        with st.spinner(T["ui"]["spinner"]):
             # Build story and title
             story_text = generate_story_text(child_name, child_age, child_interest, story_objective, your_name)
             story_title = generate_story_title(text = story_text)
-            
-            # # Use Replicate text model
-            # story_text = generate_story_text_replicate(child_name, child_age, child_interest, story_objective, your_name) 
-            # story_title = generate_story_title_replicate(text = story_text)
             story_title = story_title.strip()
-
-            # Extract scenes and illustration prompts
             scenes, prompts = extract_scenes_and_prompts(story_text)
-            st.success("Text generation complete!")
-            print(f"Extracted {len(scenes)} scenes and {len(prompts)} prompts.")
             
-        # Audio generation
-        with st.spinner("Generating story audio..."):
-            # story_audio = generate_audio_from_text(story_chunk = "\n\n".join(scenes))
-            # story_audio_url = upload_audio_to_r2(audio_bytes = story_audio, filename=f"{story_title.replace(' ', '_')}_audio.mp3")
+            # Generate audio
             story_audio = generate_audio_from_text_replicate(story_chunk = "\n\n".join(scenes))
             story_audio_url = upload_audio_to_r2(audio_bytes = story_audio, filename=f"{story_title.replace(' ', '_')}_audio.mp3")
-            st.success("Audio generation complete!")
-            print(f"Uploaded audio URL: {story_audio_url}")
-        
-        # Cover illustration generation
-        cover_prompt = f"Do not include any text in the image. Design a children's storybook cover illustration related to the topic of '{child_interest}'. Do not include any text or human-like characters in the image."
-        
-        with st.spinner("Generating cover image..."):
-            # cover_b64 = generate_image_for_prompt(cover_prompt, size="storybook")
+            
+            # Genarate cover image
+            cover_prompt = f"Do not include any text in the image. Design a children's storybook cover illustration related to the topic of '{child_interest}'. Do not include any text or human-like characters in the image."
             cover_b64 = generate_image_for_prompt_openai(cover_prompt)
-            st.success("Cover image generated.")
 
-        # Generate each scene image
-        images_b64 = []
-        with st.spinner("Generating scene images..."):
+            # Generate scene images
+            images_b64 = []
             for p in prompts:
-                # img_b64 = generate_image_for_prompt(p, size="storybook") 
                 img_b64 = generate_image_for_prompt_openai(p)
                 images_b64.append(img_b64)
-        
-        st.success("Scene images generated.")
-        print("Scene images generated.")
 
-        # Create PDF bytes
-        with st.spinner("Composing PDF..."):
+            # Create PDF bytes
             pdf_bytes = create_storybook_pdf_bytes(
                 title=story_title,
                 author=your_name,
@@ -155,22 +143,10 @@ if submitted:
                 story_audio_url=story_audio_url,
             )
 
-        st.success("PDF composition complete!")
-        print("PDF ready!")
-
-        # Send via SendGrid
-        if recipient_email:
-            with st.spinner(f"Sending PDF to {recipient_email}"):
-                subject = f"Your storybook: {story_title}"
-                body = (
-                    f"<p>Hello!</p>"
-                    f"<p>We have generated the personalized storybook '{story_title}' for {child_name} in the PDF attachment."
-                    f"<br/>Click <a href='{story_audio_url}'>HERE</a> to download the audio book.</p>"
-                    f"<p>✨ Your personalized children storybook is completely <strong>free to enjoy!</strong> Hope you like it!"
-                    f"<br/>If you love it and want to support the creator, a small donation would help keep the project growing and allow me to build even more magical features for families.</p>"
-                    f"<p>💛 Support the project: <a href='https://gogetfunding.com/give-a-child-the-gift-of-their-own-story/'>HERE</a>. Every gesture counts and thank you!</p>"
-                    f"<p>Best regards,<br/>The StoryGenerator Team</p>"
-                )
+            # Send via SendGrid
+            if recipient_email:
+                subject = T["email"]["subject"]
+                body = (T["email"]["body"])
 
                 try:
                     resp = send_email_with_attachment(
@@ -178,14 +154,15 @@ if submitted:
                         subject=subject,
                         body=body,
                         attachment_bytes=pdf_bytes,
-                        filename="storybook.pdf",
+                        filename=T["email"]["file_name"],
                     )
-                    st.success(f"Email sent to {recipient_email}! If you don't see it, please check your spam/junk folder.")
-                    print(f"Email sent (status {resp.status_code}).")
+                    st.success(T["ui"]["success"])
+                    
                 except Exception as e:
-                    print(f"Failed to send email: {e}")
+                    print(T["email"]["send_failure"].format(e=e))
+            
 
 st.write("---")
-st.markdown("👉 Need help? Visit the **How To Use** page in the sidebar.")
+st.markdown(T["ui"]["home_help"])
 
 # End of file

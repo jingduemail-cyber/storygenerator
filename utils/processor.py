@@ -53,7 +53,9 @@ import logging
 from multiprocessing import Process, Queue
 import replicate
 import requests
-
+from utils.language import get_language
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 
 
@@ -134,13 +136,15 @@ _BLANK_PNG_B64 = (
 _local_pipe = None
 _replicate_client = None
 
-
-
-
 # Initialize OpenAI client
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 # ------------------ Configuration & Helpers ------------------
+# Import fonts
+pdfmetrics.registerFont(
+    TTFont("NotoSansSC", "assets/fonts/NotoSansSC-Regular.ttf")
+)
+
 # PDF layout constants
 PAGE_SIZE = landscape(letter)
 PAGE_WIDTH, PAGE_HEIGHT = PAGE_SIZE
@@ -157,10 +161,11 @@ TEXT_AREA_HEIGHT = SPREAD_HEIGHT * 0.35
 styles = getSampleStyleSheet()
 
 # Default paragraph style; will be adjusted with font sizing when needed
+# Switch font from Haelvetica to NotoSansCJK for better CJK support
 BASE_PAR_STYLE = ParagraphStyle(
     "BaseScene",
     parent=styles["Normal"],
-    fontName="Helvetica",
+    fontName="NotoSansSC",
     fontSize=16, #14
     leading=18,
     alignment=TA_LEFT,
@@ -169,7 +174,7 @@ BASE_PAR_STYLE = ParagraphStyle(
 COVER_TITLE_STYLE = ParagraphStyle(
     "CoverTitle",
     parent=styles["Title"],
-    fontName="Helvetica-Bold",
+    fontName="NotoSansSC",
     fontSize=36,
     alignment=TA_CENTER,
     leading=42,
@@ -178,7 +183,7 @@ COVER_TITLE_STYLE = ParagraphStyle(
 COVER_AUTHOR_STYLE = ParagraphStyle(
     "CoverAuthor",
     parent=styles["Normal"],
-    fontName="Helvetica",
+    fontName="NotoSansSC",
     fontSize=18,
     alignment=TA_CENTER,
 )
@@ -249,6 +254,125 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
     """
     return prompt
 
+def build_story_prompt_lang(intake, child_name: str, child_age: str, child_interest: str, story_objective: str, your_name: str) -> str:
+    lang = intake.get("language", "en")
+    
+    if lang == "en":
+        prompt = f"""
+            You are a children's storybook generator. Create a personalized, age-appropriate, multi-scene illustrated storybook based on the input parameters below.
+            
+            Child name: {intake['child_name']}
+            Child age: {intake['child_age']}
+            Child interests: {intake['child_interest']}
+            Story objective: {intake['story_objective']}
+
+            For total scene count and word count, strictly follow these guidelines based on the child's age {intake['child_age']}:
+            - For child's age from 0 - 2 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible. 
+            - For child's age from 2 - 4 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
+            - For child's age from 4 - 6 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
+            - For child's age above 6 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
+            
+            For each scene, follow these guidelines strictly:
+            - The scene text includes 2-5 sentences of narrative tailored to {intake['child_age']}-old children, incorporating {intake['child_interest']} and aligned with the story objective of {intake['story_objective']}.
+            - Keep the scene text simple, warm, and imaginative, language appropriate and easy enough for {intake['child_age']}-year-olds.
+            - After the scene text, then include one short illustration prompt in parentheses on its own line immediately after the scene text. 
+            - Then immediately, separate each scene (including both the scene text and illustration prompt) with '---' on its own line.
+            - Do not include any language that is not relevant to the scene text and illustration prompt in the generated output. 
+            - Do not include story title, nor any note at the beginning or end relating to word count and how the generated text meets the input requirements, or text like "Here is the personalized storybook for...".
+            
+            For illustration prompts, follow these guidelines strictly:
+            - Each illustration prompt should describe only what each scene appears visually. No text inside the images.
+            - Include in each illustration prompt that it is for storybook illustration, full-bleed composition, wide scene, background extends to edges, no border, no frame, no white margins, soft pastel watercolor style.
+            - Illustrations of the fictional characters must be consistent throughout the entire scenes. The main character has the same appearance across pages: round face, simple dot eyes, soft outlines, consistent clothing colors.
+            - Soft watercolor children-book illustration style. Gentle pastel color palette with soft blues, mint greens, lavender, and light peach.
+            - Balanced neutral lighting, calm and soothing mood. No golden yellow, orange, or sepia color cast.
+            - Round shapes, friendly, safe for children. Whimsical, soft cartoon style. Daylight white balance.
+            - Do not depict any real or identifiable person, nor mention any children name in the prompt. Create fully fictional, stylized cartoon characters with no realistic human features.
+
+            Follow these for the story guidelines:
+            - Scenes should begin with a captivating hook. 
+            - Include a gentle problem and a positive resolution. 
+            - Make sure the child interests shape the story world and plot.
+            
+            Adhere to these writing style guidelines:
+            - Use clear language suitable for {intake['child_age']} children. Keep language simple, warm, and imaginative. 
+            - Keep tone warm, soothing, and encouraging.
+            - No scary or age-inappropriate content. 
+            - No typos and smooth flows.
+
+            Importantly, keep the scene / page count and word count exactly as specified above. Use simple words and short sentences suitable for {intake['child_age']} children.
+            Very importantly again, strictly follow the scene guidelines and illustration prompt guidelines mentioned above. 
+            
+            Lastly, strictly adhere to the following instructions for scene formatting, for each scene:
+            - Do not include any text other than the scene text and illustration prompt, such as title or introductory text for example "Here is the personalized storybook for...".
+            - Immediately after the scene text, include one short illustration prompt in parentheses on its own new line. 
+            - Then immediately, separate each scene (including both the scene text and illustration prompt) with '---' on its own new line.
+            - Do not include any language that is not relevant to the scene text and illustration prompt in the generated output, such as story title, or notes at the beginning or end related to word count and how the generated text meets the requirements.
+            - Remember to separate each scene (including both the scene text and illustration prompt) with '---' on its own line.
+            - Remember to include one short illustration prompt in parentheses on its own new line immediately after the scene text for each scene.
+            - Remember to include in each illustration prompt that it is for storybook illustration, full-bleed composition, wide scene, background extends to edges, no border, no frame, no white margins, soft pastel watercolor style.
+            - Remember that do not include any text other than the scene text and illustration prompt, such as "Here is the personalized storybook for..." in scene texts.
+            
+            Story starts now:
+        """
+    else:
+        prompt = f"""
+            你是一位儿童故事书生成器。请根据以下输入参数，创作一个个性化、适合年龄的多场景插图故事书。
+            
+            孩子名字：{intake['child_name']}
+            孩子年龄：{intake['child_age']}
+            孩子兴趣：{intake['child_interest']}
+            故事目标：{intake['story_objective']}
+            
+            针对总场景数和字数，请严格遵循以下指导方针，基于孩子的年龄 {intake['child_age']}：
+            - 对于0-2岁的孩子，总场景数应为4页，字数尽量接近100字。 
+            - 对于2-4岁的孩子，总场景数应为4页，字数尽量接近100字。
+            - 对于4-6岁的孩子，总场景数应为4页，字数尽量接近100字。
+            - 对于6岁以上的孩子，总场景数应为4页，字数尽量接近100字。
+            
+            对于每个场景，请严格遵循以下指导方针：
+            - 场景文本包括2-5个句子的叙述，适合 {intake['child_age']} 岁的孩子，融入 {intake['child_interest']} 并与故事目标 {intake['story_objective']} 保持一致。
+            - 保持场景文本简单、温暖且富有想象力，语言适合 {intake['child_age']} 岁的孩子理解。
+            - 在场景文本之后，在新行中立即包含一个括号内的简短插图提示。 
+            - 然后立即，用“---”分隔每个场景（包括场景文本和插图提示）。
+            - 请勿在生成的输出中包含与场景文本和插图提示无关的任何语言。 
+            - 请勿包含故事标题，或与字数及其如何满足输入要求相关的任何注释，或类似“这是为……生成的个性化故事书”的文本。
+            
+            请遵守以下插图提示指导方针：
+            - 插图提示应仅描述每个场景的视觉外观。插图提示中应包含以下内容：适合故事书插图、全幅构图、宽场景、背景延伸至边缘、无边框、无白色边距、柔和的水彩风格。
+            - 插图中的虚构角色在所有场景中必须保持一致。主角在各页中外观相同：圆脸、简单的点状眼睛、柔和的轮廓、一致的服装颜色。
+            - 使用柔和的水彩儿童书插图风格。温和的柔色调调色板，包括柔和的蓝色、薄荷绿色、薰衣草色和浅桃色。
+            - 光线均衡中性，氛围平静舒缓。无金黄色、橙色或棕褐色调。
+            - 形状圆润，友好，适合儿童。异想天开的，柔和的卡通风格。日光白平衡。
+            - 请勿描绘任何真实或可识别的人物，也不要在提示中提及任何儿童姓名。请创建完全虚构的、风格化的卡通角色，不具有真实的人类特征。
+            
+            请遵守以下故事指导方针：
+            - 场景应以引人入胜的开头开始。
+            - 包含一个温和的问题和积极的解决方案。
+            - 确保孩子的兴趣塑造故事世界和情节。
+            
+            请遵守以下写作风格指导方针：
+            - 使用适合{intake['child_age']}岁儿童的清晰语言。 语言应简单、温暖且富有想象力。
+            - 保持语气温暖、舒缓和鼓励性。
+            - 不包含任何可怕或不适合年龄的内容。
+            - 无拼写错误，流畅自然。
+            
+            重要的是，请严格按照上述规定的场景/页数和字数要求进行创作。请使用适合{intake['child_age']}岁儿童的简单词汇和简短句子。
+            非常重要的是，请严格遵循上述提到的场景指导方针和插图提示指导方针。
+            
+            请严格遵守以下场景格式说明：
+            - 请勿包含除场景文本和插图提示之外的任何文本，例如标题或介绍性文本，例如“这是为……生成的个性化故事书”。
+            - 在场景文本后，立即在新行中用括号括起一个简短的插图提示。
+            - 然后，立即用“---”分隔每个场景（包括场景文本和插图提示）。
+            - 请勿在生成的输出中包含与场景文本和插图提示无关的任何语言，例如故事标题，或与字数及其如何满足要求相关的注释。
+            - 请用“---”分隔每个场景（包括场景文本和插图提示）。
+            - 请在每个场景的场景文本后，立即在新行中用括号括起一个简短的插图提示。
+            - 请在每个插图提示中包含以下内容：适合故事书插图、全幅构图、宽场景、背景延伸至边缘、无边框、无白色边距、柔和的水彩风格。
+            - 请勿在场景文本中包含除场景文本和插图提示之外的任何文本，例如“这是为……生成的个性化故事书”。
+            
+            故事开始：
+        """
+    return prompt
 
 def generate_story_text(child_name, child_age, child_interest, story_objective, your_name):
     prompt = build_story_prompt(child_name, child_age, child_interest, story_objective, your_name)
@@ -264,6 +388,25 @@ def generate_story_text(child_name, child_age, child_interest, story_objective, 
     )
     text = response.choices[0].message.content
     return text
+
+# OpenAI text generation with multiple languages
+def generate_story_text_lang(child_name, child_age, child_interest, story_objective, your_name, language="en"):
+    T = get_language(language)
+    
+    prompt = build_story_prompt(child_name, child_age, child_interest, story_objective, your_name)
+
+    response = openai_client.chat.completions.create(
+        model="gpt-5.1",
+        messages=[
+            {"role": "system", "content": T["prompts"]["system"]},
+            {"role": "user", "content": prompt}
+           ],
+        max_completion_tokens=3000,
+        temperature=0.7,
+    )
+    text = response.choices[0].message.content
+    return text
+
 
 # Generate text using Replicate model REPLICATE_TEXT_MODEL_ID
 def generate_story_text_replicate(child_name, child_age, child_interest, story_objective, your_name):
@@ -1117,6 +1260,29 @@ def send_email_with_attachment(send_to: str, subject: str, body: str, attachment
     attachedFile = Attachment(
         FileContent(encoded),
         FileName(filename),
+        FileType("application/pdf"),
+        Disposition("attachment"),
+    )
+    message.attachment = attachedFile
+
+    sg = SendGridAPIClient(SENDGRID_API_KEY)
+    response = sg.send(message)
+    return response
+
+def send_email_with_attachment_lang(send_to: str, subject: str, body: str, attachment_bytes: bytes, filename: str, from_email=None, language="en"):
+    T = get_language(language)
+    
+    message = Mail(
+        from_email=FROM_EMAIL,
+        to_emails=send_to,
+        subject=T["email"]["subject"],
+        html_content=T["email"]["body"],
+    )
+
+    encoded = base64.b64encode(attachment_bytes).decode()
+    attachedFile = Attachment(
+        FileContent(encoded),
+        FileName(T["email"]["file_name"]),
         FileType("application/pdf"),
         Disposition("attachment"),
     )

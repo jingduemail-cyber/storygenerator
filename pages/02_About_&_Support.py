@@ -1,11 +1,27 @@
 # --- Set up global page formatting and styles ---
 import streamlit as st
+from utils.ui import render_top_bar, get_app_title
+from utils.language.loader import get_language
+from pathlib import Path
+
+PAGE_ID = "about_and_support"
+
+if "lang" not in st.session_state:
+    st.session_state.lang = "en"
+
+params = st.query_params
+
+if "lang" in params:
+    st.session_state.lang = params["lang"]
+
+T = get_language(st.session_state.lang)
 
 st.set_page_config(
-    page_title="Personalized Storybook Generator",
-    page_icon="📚",
+    page_title=get_app_title(T, PAGE_ID),
     layout="centered"
 )
+
+render_top_bar(T, PAGE_ID)
 
 # Global CSS for clean, modern UI
 st.markdown("""
@@ -32,33 +48,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- Create About and Support page ---
-st.set_page_config(page_title="About", page_icon="💛")
-
-st.markdown("<h1 class='main-title'>💛 About This Project</h1>", unsafe_allow_html=True)
 st.write("---")
-
-st.markdown("""
-### 👋 Hello!
-
-This project was created to bring joy, imagination, and personalized storytelling 
-to children and families around the world.
-
-Each book is generated using AI-powered text, illustration, audio and PDF workflows, 
-designed with love and care.
-
-""")
+st.header(T["ui"]["about_subheader"])
+st.markdown(T["ui"]["about_description"])
 
 st.write("---")
-st.header("☕ Support My Work")
-
-st.markdown("""
-If you enjoy the storybooks and want to support ongoing development, consider supporting me on GoGetFunding 👉 **[HERE](https://gogetfunding.com/give-a-child-the-gift-of-their-own-story/)**.
-""")
+st.header(T["ui"]["support_subheader"])
+st.markdown(T["ui"]["support_description"])
 
 st.write("---")
-st.header("📬 Contact")
-
-st.markdown("""
-If you need help, feel free to reach out:  
-**jingdu.email@gmail.com**
-""")
+st.header(T["ui"]["contact_subheader"])
+st.markdown(T["ui"]["contact_description"])

@@ -1,11 +1,27 @@
 # --- Set up global page formatting and styles ---
 import streamlit as st
+from utils.ui import render_top_bar, get_app_title
+from utils.language.loader import get_language
+from pathlib import Path
+
+PAGE_ID = "how_to_use"
+
+if "lang" not in st.session_state:
+    st.session_state.lang = "en"
+
+params = st.query_params
+
+if "lang" in params:
+    st.session_state.lang = params["lang"]
+
+T = get_language(st.session_state.lang)
 
 st.set_page_config(
-    page_title="Personalized Storybook Generator",
-    page_icon="📚",
+    page_title=get_app_title(T, PAGE_ID),
     layout="centered"
 )
+
+render_top_bar(T, PAGE_ID)
 
 # Global CSS for clean, modern UI
 st.markdown("""
@@ -32,42 +48,27 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- Set up the how to use and faq page ---
-st.set_page_config(page_title="How to Use", page_icon="❓")
-
-st.markdown("<h1 class='main-title'>❓ How to Use This App</h1>", unsafe_allow_html=True)
-st.markdown("<p class='subtitle'>Everything you need to know before getting started</p>", unsafe_allow_html=True)
 st.write("---")
-
-st.header("🧸 How It Works")
-
-st.markdown("""
-1. Fill in your child's details on the **Home** page  
-2. Click **Generate Storybook**  
-3. Our system generates story text, illustrations, audio and packed into a PDF  
-4. You will receive the final storybook in about **15 minutes**  
-""")
+st.header(T["ui"]["how_subtitle"])
+st.markdown(T["ui"]["how_steps"])
 
 st.write("---")
-st.header("💬 Frequently Asked Questions")
+st.header(T["ui"]["faq_subtitle"])
 
-with st.expander("How much does it cost me to generate a personalized story book?"):
-    st.write("It is completely free. Enjoy!")
+with st.expander(T["ui"]["faq_cost_question"]):
+    st.write(T["ui"]["faq_cost_answer"])
 
-with st.expander("How long does it take?"):
-    st.write("Around 10–15 minutes depending on server load.")
+with st.expander(T["ui"]["faq_time_question"]):
+    st.write(T["ui"]["faq_time_answer"])
 
-with st.expander("Where will I receive the storybook?"):
-    st.write("At the email address you enter in the form. If you don't see it in your inbox, kindly check your Spam or Promotions folder.")
+with st.expander(T["ui"]["faq_delivery_question"]):
+    st.write(T["ui"]["faq_delivery_answer"])
 
-with st.expander("What if I don't receive the storybook?"):
-    st.write("""
-- Check your Spam or Promotions folder.  
-- Ensure your email address was entered correctly.  
-- Try again or contact support if the issue persists.
-""")
+with st.expander(T["ui"]["faq_delivery_error_question"]):
+    st.write(T["ui"]["faq_delivery_error_answer"])
 
-with st.expander("Is my child's data safe?"):
-    st.write("Yes. No data is shared or used for any purpose besides generating the storybook.")
+with st.expander(T["ui"]["faq_data_question"]):
+    st.write(T["ui"]["faq_data_answer"])
 
-with st.expander("Can I request multiple stories?"):
-    st.write("Yes, simply submit the form again with different details.")
+with st.expander(T["ui"]["faq_volume_question"]):
+    st.write(T["ui"]["faq_volume_answer"])
