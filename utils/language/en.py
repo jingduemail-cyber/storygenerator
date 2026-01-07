@@ -59,6 +59,9 @@ LANG = {
         "system": (
             "You are an artful and masterful expert specializing for children storywriting."
             "Write in English. Keep content warm, imaginative, and age-appropriate."
+        ),
+        "system_title": (
+            "You generate short, creative and catchy titles for children's storybook."
         )
     },
 
@@ -66,7 +69,8 @@ LANG = {
         "subject": "Your personalized storybook",
         "body": (
             f"<p>Hello!</p>"
-            f"<p>We have generated the personalized storybook in the PDF attachment."
+            f"<p>We have generated the personalized storybook in the PDF attachment.</p>"
+            "<p>{audio_link}</p>"
             f"<p>✨ Your personalized children storybook is completely <strong>free to enjoy!</strong> Hope you like it!"
             f"<br/>If you love it and want to support the creator, a small donation would help keep the project growing and allow me to build even more magical features for families.</p>"
             f"<p>💛 Support the project: <a href='https://gogetfunding.com/give-a-child-the-gift-of-their-own-story/'>HERE</a>. Every gesture counts and thank you!</p>"
@@ -82,3 +86,6 @@ LANG = {
         "about_and_support": {"title": "About & Support"}
     }
 }
+
+# How to add this into the email body
+# f"<br/>Click <a href='{story_audio_url}'>HERE</a> to download the audio book.</p>"

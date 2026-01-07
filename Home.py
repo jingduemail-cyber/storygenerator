@@ -3,14 +3,18 @@ import streamlit as st
 from utils.processor import (
     build_story_prompt, 
     generate_story_text,
+    generate_story_text_lang,
     generate_story_text_replicate, 
     generate_story_title, 
+    generate_story_title_lang,
     generate_story_title_replicate,
     generate_story_text_openrouter,
     extract_scenes_and_prompts,
     generate_audio_from_text,
+    sanitize_text_for_tts,
     generate_audio_from_text_replicate,
     get_r2_client, 
+    build_audio_link,
     upload_audio_to_r2, 
     generate_image_for_prompt, 
     generate_image_for_prompt_openai,
@@ -112,15 +116,25 @@ if submitted:
         "language": st.session_state.lang
         }
         
+        lang = intake.get("language", "en")
+        
         with st.spinner(T["ui"]["spinner"]):
             # Build story and title
             story_text = generate_story_text(child_name, child_age, child_interest, story_objective, your_name)
             story_title = generate_story_title(text = story_text)
+            
+            # # Test with multiple language support for prompting
+            # story_text = generate_story_text_lang(intake)
+            # story_title = generate_story_title_lang(text = story_text, language=lang)
+            
             story_title = story_title.strip()
             scenes, prompts = extract_scenes_and_prompts(story_text)
             
             # Generate audio
-            story_audio = generate_audio_from_text_replicate(story_chunk = "\n\n".join(scenes))
+            story_chunk = "\n\n".join(scenes)
+            # story_chunk = sanitize_text_for_tts(story_chunk)
+
+            story_audio = generate_audio_from_text_replicate(story_chunk = story_chunk)
             story_audio_url = upload_audio_to_r2(audio_bytes = story_audio, filename=f"{story_title.replace(' ', '_')}_audio.mp3")
             
             # Genarate cover image
@@ -146,7 +160,12 @@ if submitted:
             # Send via SendGrid
             if recipient_email:
                 subject = T["email"]["subject"]
-                body = (T["email"]["body"])
+                audio_link_html = build_audio_link(story_audio_url=story_audio_url, lang=intake["language"])
+                
+                if lang == "zh":
+                    body = T["email"]["body"]
+                else:
+                    body = T["email"]["body"].format(audio_link=audio_link_html)
 
                 try:
                     resp = send_email_with_attachment(

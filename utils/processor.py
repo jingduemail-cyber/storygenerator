@@ -56,7 +56,7 @@ import requests
 from utils.language import get_language
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-
+import re
 
 
 
@@ -205,9 +205,9 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         
         For total scene count and word count, strictly follow these guidelines based on the child's age {child_age}:
         - For child's age from 0 - 2 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible. 
-        - For child's age from 2 - 4 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
-        - For child's age from 4 - 6 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
-        - For child's age above 6 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
+        - For child's age from 2 - 4 years old, total scene count should be exactly 5 pages with total word count as close to 125 words as possible.
+        - For child's age from 4 - 6 years old, total scene count should be exactly 6 pages with total word count as close to 150 words as possible.
+        - For child's age above 6 years old, total scene count should be exactly 6 pages with total word count as close to 180 words as possible.
         
         For each scene, follow these guidelines strictly:
         - The scene text includes 2-5 sentences of narrative tailored to {child_age}-old children, incorporating {child_interest} and aligned with the story objective of {story_objective}.
@@ -220,7 +220,7 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
         For illustration prompts, follow these guidelines strictly:
         - Each illustration prompt should describe only what each scene appears visually. No text inside the images.
         - Include in each illustration prompt that it is for storybook illustration, full-bleed composition, wide scene, background extends to edges, no border, no frame, no white margins, soft pastel watercolor style.
-        - Illustrations of the fictional characters must be consistent throughout the entire scenes. The main character has the same appearance across pages: round face, simple dot eyes, soft outlines, consistent clothing colors.
+        - Illustrations of the fictional characters must be consistent throughout the entire scenes. The main character has the same appearance across pages: round face, simple dot eyes, soft outlines, consistent clothing colors, same hairstyle, same gender.
         - Soft watercolor children-book illustration style. Gentle pastel color palette with soft blues, mint greens, lavender, and light peach.
         - Balanced neutral lighting, calm and soothing mood. No golden yellow, orange, or sepia color cast.
         - Round shapes, friendly, safe for children. Whimsical, soft cartoon style. Daylight white balance.
@@ -254,8 +254,13 @@ def build_story_prompt(child_name: str, child_age: str, child_interest: str, sto
     """
     return prompt
 
-def build_story_prompt_lang(intake, child_name: str, child_age: str, child_interest: str, story_objective: str, your_name: str) -> str:
+def build_story_prompt_lang(intake: dict) -> str:
     lang = intake.get("language", "en")
+    child_name = intake.get("child_name")
+    child_age = intake.get("child_age")
+    child_interest = intake.get("child_interest")
+    story_objective = intake.get("story_objective")
+    your_name = intake.get("your_name")
     
     if lang == "en":
         prompt = f"""
@@ -283,7 +288,7 @@ def build_story_prompt_lang(intake, child_name: str, child_age: str, child_inter
             For illustration prompts, follow these guidelines strictly:
             - Each illustration prompt should describe only what each scene appears visually. No text inside the images.
             - Include in each illustration prompt that it is for storybook illustration, full-bleed composition, wide scene, background extends to edges, no border, no frame, no white margins, soft pastel watercolor style.
-            - Illustrations of the fictional characters must be consistent throughout the entire scenes. The main character has the same appearance across pages: round face, simple dot eyes, soft outlines, consistent clothing colors.
+            - Illustrations of the fictional characters must be consistent throughout the entire scenes. The main character has the same appearance across pages: round face, simple dot eyes, soft outlines, consistent clothing colors, same hairstyle, same gender.
             - Soft watercolor children-book illustration style. Gentle pastel color palette with soft blues, mint greens, lavender, and light peach.
             - Balanced neutral lighting, calm and soothing mood. No golden yellow, orange, or sepia color cast.
             - Round shapes, friendly, safe for children. Whimsical, soft cartoon style. Daylight white balance.
@@ -340,7 +345,7 @@ def build_story_prompt_lang(intake, child_name: str, child_age: str, child_inter
             
             请遵守以下插图提示指导方针：
             - 插图提示应仅描述每个场景的视觉外观。插图提示中应包含以下内容：适合故事书插图、全幅构图、宽场景、背景延伸至边缘、无边框、无白色边距、柔和的水彩风格。
-            - 插图中的虚构角色在所有场景中必须保持一致。主角在各页中外观相同：圆脸、简单的点状眼睛、柔和的轮廓、一致的服装颜色。
+            - 插图中的虚构角色在所有场景中必须保持一致。主角在各页中外观相同：圆脸、简单的点状眼睛、柔和的轮廓、一致的服装颜色, 一致的发型, 一致的性别。
             - 使用柔和的水彩儿童书插图风格。温和的柔色调调色板，包括柔和的蓝色、薄荷绿色、薰衣草色和浅桃色。
             - 光线均衡中性，氛围平静舒缓。无金黄色、橙色或棕褐色调。
             - 形状圆润，友好，适合儿童。异想天开的，柔和的卡通风格。日光白平衡。
@@ -390,10 +395,16 @@ def generate_story_text(child_name, child_age, child_interest, story_objective, 
     return text
 
 # OpenAI text generation with multiple languages
-def generate_story_text_lang(child_name, child_age, child_interest, story_objective, your_name, language="en"):
-    T = get_language(language)
+def generate_story_text_lang(intake: dict) -> str:
+    lang = intake.get("language", "en")
+    child_name = intake.get("child_name")
+    child_age = intake.get("child_age")
+    child_interest = intake.get("child_interest")
+    story_objective = intake.get("story_objective")
+    your_name = intake.get("your_name")
     
-    prompt = build_story_prompt(child_name, child_age, child_interest, story_objective, your_name)
+    T = get_language(lang)
+    prompt = build_story_prompt_lang(intake)
 
     response = openai_client.chat.completions.create(
         model="gpt-5.1",
@@ -490,6 +501,35 @@ def generate_story_title(text: str) -> str:
     title = response.choices[0].message.content.strip()
     return title
 
+# Function for title generation with language support
+def generate_story_title_prompt(text: str, language: str) -> str:
+    
+    if language == "en":
+        prompt = f"Please generate one short storybook title, remember only one title, for this story:\n\n{text}"
+    elif language == "zh":
+        prompt = f"请为以下故事生成一个简短的故事书标题，记住只需要一个标题：\n\n{text}"
+    else:
+        prompt = f"Please generate one short storybook title, remember only one title, for this story:\n\n{text}"
+    return prompt
+
+# OpenAI title generation with multiple languages - WIP 060126
+def generate_story_title_lang(text: str, language: str) -> str:
+    T = get_language(language)
+    title_prompt = generate_story_title_prompt(text, language)
+    
+    response = openai_client.chat.completions.create(
+        model="gpt-5.1",
+        messages=[
+            {"role": "system", "content": T["prompts"]["system_title"]},
+            {"role": "user", "content": title_prompt}
+        ],
+        max_completion_tokens=50,
+        temperature=0.7,
+    )
+    title = response.choices[0].message.content.strip()
+    return title
+
+
 def generate_story_title_replicate(text: str) -> str:
     # Add slow-down between predictions
     time.sleep(15)  # <-- Automatic pause BEFORE calling Replicate
@@ -550,6 +590,30 @@ def generate_audio_from_text(story_chunk: str) -> str:
     )
     audio_bytes = audio_resp.read()  # audio binary    
     return audio_bytes
+
+
+
+def sanitize_text_for_tts(text: str) -> str:
+    """
+    Removes illustration prompts, parentheses blocks, and non-narrative markup
+    before sending text to TTS models.
+    """
+
+    if not text:
+        return ""
+
+    # Remove anything inside full-width or half-width parentheses
+    text = re.sub(r"（.*?）", "", text, flags=re.DOTALL)
+    text = re.sub(r"\(.*?\)", "", text, flags=re.DOTALL)
+
+    # Remove leftover prompt markers
+    text = re.sub(r"插图.*$", "", text)
+
+    # Normalize whitespace
+    text = re.sub(r"\n{2,}", "\n", text)
+
+    return text.strip()
+
 
 def generate_audio_from_text_replicate(story_chunk: str, speaker="af_heart") -> str:
     import requests
@@ -633,6 +697,29 @@ def upload_audio_to_r2(audio_bytes: bytes, filename: str = None) -> str:
     public_url = f"{public_base_url}/{filename}"
 
     return public_url
+
+# Audio link generation
+def build_audio_link(
+    story_audio_url: str | None,
+    lang: str = "en"
+) -> str:
+    if not story_audio_url:
+        return ""
+
+    if lang == "zh":
+        return (
+            "<p>🎧 有声书已为您准备好！"
+            f"<br/>点击 <a href='{story_audio_url}'>这里</a> 下载儿童有声故事书。</p>"
+        )
+
+    # Default: English
+    return (
+        "<p>🎧 Your audiobook is ready!"
+        f"<br/>Click <a href='{story_audio_url}'>HERE</a> to download the audiobook.</p>"
+    )
+
+
+
 
 # ------------------ Image generation ------------------
 
@@ -1049,7 +1136,7 @@ def create_storybook_pdf_bytes(
 
             # --- Author ---
             author_style = COVER_AUTHOR_STYLE
-            author_para = Paragraph(f"By {self.author}", author_style)
+            author_para = Paragraph(f"{self.author}", author_style)
             aw, ah = author_para.wrap(w * 0.9, h)
             author_para.drawOn(c, (w - aw) / 2, h - th - ah - 55)
 
@@ -1222,7 +1309,7 @@ def create_storybook_pdf_bytes(
     # story.append(Spacer(1, 2 * inch))
     # story.append(Paragraph(title, COVER_TITLE_STYLE))
     # story.append(Spacer(1, 0.5 * inch))
-    # story.append(Paragraph(f"By {author}", COVER_AUTHOR_STYLE))
+    # story.append(Paragraph(f"{author}", COVER_AUTHOR_STYLE))
     # story.append(PageBreak())
     
     # # Add cover image spread
@@ -1269,24 +1356,14 @@ def send_email_with_attachment(send_to: str, subject: str, body: str, attachment
     response = sg.send(message)
     return response
 
-def send_email_with_attachment_lang(send_to: str, subject: str, body: str, attachment_bytes: bytes, filename: str, from_email=None, language="en"):
-    T = get_language(language)
-    
+# Test version without attachment - to be deleted
+def send_email_with_attachment_test(send_to: str, subject: str, body: str, from_email=None):
     message = Mail(
         from_email=FROM_EMAIL,
         to_emails=send_to,
-        subject=T["email"]["subject"],
-        html_content=T["email"]["body"],
+        subject=subject,
+        html_content=body,
     )
-
-    encoded = base64.b64encode(attachment_bytes).decode()
-    attachedFile = Attachment(
-        FileContent(encoded),
-        FileName(T["email"]["file_name"]),
-        FileType("application/pdf"),
-        Disposition("attachment"),
-    )
-    message.attachment = attachedFile
 
     sg = SendGridAPIClient(SENDGRID_API_KEY)
     response = sg.send(message)
