@@ -5,9 +5,11 @@ from utils.processor import (
     generate_story_text,
     generate_story_text_lang,
     generate_story_text_replicate, 
+    generate_story_text_replicate_gpt5nano,
     generate_story_title, 
     generate_story_title_lang,
     generate_story_title_replicate,
+    generate_story_title_replicate_gpt5nano,
     generate_story_text_openrouter,
     extract_scenes_and_prompts,
     generate_audio_from_text,
@@ -119,32 +121,44 @@ if submitted:
         lang = intake.get("language", "en")
         
         with st.spinner(T["ui"]["spinner"]):
-            # Build story and title
+            # Build story and title with OpenAI
             story_text = generate_story_text(child_name, child_age, child_interest, story_objective, your_name)
             story_title = generate_story_title(text = story_text)
+
+            # # Build story and title with Replicate GPT-5-Nano
+            # story_text = generate_story_text_replicate_gpt5nano(intake=intake)
+            # story_title = generate_story_title_replicate_gpt5nano(text = story_text, lang=lang)
             
-            # # Test with multiple language support for prompting
-            # story_text = generate_story_text_lang(intake)
-            # story_title = generate_story_title_lang(text = story_text, language=lang)
-            
+            # Extract scenes and prompts
             story_title = story_title.strip()
             scenes, prompts = extract_scenes_and_prompts(story_text)
             
             # Generate audio
             story_chunk = "\n\n".join(scenes)
+            print(story_title)
+            print("Story chunk for audio generation:")
+            print(story_chunk)
             # story_chunk = sanitize_text_for_tts(story_chunk)
+            
+            for i in range(len(scenes)):
+                print(f"\n--- Scene {i+1} ---")
+                print(scenes[i])
+                print("\nPrompt:")
+                print(prompts[i])
 
-            story_audio = generate_audio_from_text_replicate(story_chunk = story_chunk)
+            story_audio = generate_audio_from_text_replicate(story_chunk = story_chunk, lang=lang)
             story_audio_url = upload_audio_to_r2(audio_bytes = story_audio, filename=f"{story_title.replace(' ', '_')}_audio.mp3")
             
             # Genarate cover image
             cover_prompt = f"Do not include any text in the image. Design a children's storybook cover illustration related to the topic of '{child_interest}'. Do not include any text or human-like characters in the image."
             cover_b64 = generate_image_for_prompt_openai(cover_prompt)
+            # cover_b64 = generate_image_for_prompt(cover_prompt, size="storybook")
 
             # Generate scene images
             images_b64 = []
             for p in prompts:
                 img_b64 = generate_image_for_prompt_openai(p)
+                # img_b64 = generate_image_for_prompt(p, size="storybook")
                 images_b64.append(img_b64)
 
             # Create PDF bytes
@@ -156,16 +170,13 @@ if submitted:
                 images_b64=images_b64,
                 story_audio_url=story_audio_url,
             )
+            print("PDF bytes created.")
 
             # Send via SendGrid
             if recipient_email:
                 subject = T["email"]["subject"]
                 audio_link_html = build_audio_link(story_audio_url=story_audio_url, lang=intake["language"])
-                
-                if lang == "zh":
-                    body = T["email"]["body"]
-                else:
-                    body = T["email"]["body"].format(audio_link=audio_link_html)
+                body = T["email"]["body"].format(audio_link=audio_link_html)
 
                 try:
                     resp = send_email_with_attachment(
@@ -176,6 +187,7 @@ if submitted:
                         filename=T["email"]["file_name"],
                     )
                     st.success(T["ui"]["success"])
+                    print(T["email"]["send_success"].format(email=recipient_email))
                     
                 except Exception as e:
                     print(T["email"]["send_failure"].format(e=e))

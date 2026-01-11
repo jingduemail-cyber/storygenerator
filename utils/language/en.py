@@ -77,7 +77,8 @@ LANG = {
             f"<p>Best regards,<br/>The StoryGenerator Team</p>"
         ),
         "file_name": "storybook.pdf",
-        "send_failure": "Failed to send email: {e}"
+        "send_failure": "Failed to send email: {e}",
+        "send_success": "Email sent to {email}! If you don't see it, please check your spam/junk folder."
     },
 
     "pages": {

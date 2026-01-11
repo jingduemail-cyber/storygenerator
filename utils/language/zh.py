@@ -69,13 +69,15 @@ LANG = {
         "body": (
             f"<p>您好！</p>"
             f"<p>我们已生成了个性化故事书，请见附件中的PDF文件。"
+            "<p>{audio_link}</p>"
             f"<p>✨ 您的个性化儿童故事书完全免费享用！希望您喜欢它！"
             f"<br/>如果您喜欢并想支持创作者，小额捐款将有助于项目的发展，并让我能够为家庭构建更多神奇的功能。</p>"
             f"<p>💛 支持该项目：<a href='https://gogetfunding.com/give-a-child-the-gift-of-their-own-story/'>点击这里</a>。每一份心意都值得感谢！</p>"
             f"<p>此致，<br/>故事生成器团队</p>"
         ),
         "file_name": "故事书.pdf",
-        "send_failure": "发送邮件失败：{e}"
+        "send_failure": "发送邮件失败：{e}",
+        "send_success": "邮件已发送至 {email}！如果您没有看到，请检查您的垃圾邮件/垃圾文件夹。"
     },
 
     "pages": {
