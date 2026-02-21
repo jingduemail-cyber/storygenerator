@@ -12,6 +12,7 @@ from utils.processor import (
     generate_story_title_replicate_gpt5nano,
     generate_story_text_openrouter,
     extract_scenes_and_prompts,
+    normalize_prompt,
     generate_audio_from_text,
     sanitize_text_for_tts,
     generate_audio_from_text_replicate,
@@ -23,10 +24,14 @@ from utils.processor import (
     create_storybook_pdf_bytes, 
     send_email_with_attachment,
 )
+from utils.ui_storage import save_intake_to_localstorage
+from utils.url_tools import add_query_params
+from utils.intake_codec import encode_intake, decode_intake
 import time
 from utils.ui import render_top_bar, get_app_title
 from utils.language.loader import get_language
 from pathlib import Path
+import secrets
 
 PAGE_ID = "home"
 
@@ -93,6 +98,18 @@ input {
 st.write("---")
 st.write(T["ui"]["instructions"])
 
+# Session state init
+if "intake" not in st.session_state:
+    st.session_state.intake = None
+if "page_length" not in st.session_state:
+    st.session_state.page_length = 4
+
+PAYPAL_LINKS = {
+    4: st.secrets["paypal"]["link_4"],
+    8: st.secrets["paypal"]["link_8"],
+    12: st.secrets["paypal"]["link_12"],
+}
+
 with st.form(key="story_form"):
     child_name = st.text_input(T["ui"]["child_name"])
     child_age = st.text_input(T["ui"]["child_age"])
@@ -100,100 +117,50 @@ with st.form(key="story_form"):
     story_objective = st.text_area(T["ui"]["objective"])
     your_name = st.text_input(T["ui"]["author_name"])
     recipient_email = st.text_input(T["ui"]["email"])
-    submitted = st.form_submit_button(T["ui"]["generate"])
 
+    # NEW: page length selector
+    page_length = st.radio(
+        T["ui"]["page_length"],
+        options=[4, 8, 12],
+        index=[4, 8, 12].index(st.session_state.page_length),
+        horizontal=True,
+        help=T["ui"]["help"]
+    )
+
+    submitted = st.form_submit_button("Continue to Payment")
+
+# Save intake only (no generation here)
 if submitted:
     if not recipient_email or not child_name:
         st.error(T["ui"]["error_missing_fields"])
     else:
-        st.success(T["ui"]["submit_success"])
-        
-        intake = {
-        "child_name": child_name,
-        "child_age": child_age,
-        "child_interest": child_interest,
-        "story_objective": story_objective,
-        "your_name": your_name,
-        "recipient_email": recipient_email,
-        "language": st.session_state.lang
+        st.session_state.page_length = page_length
+        st.session_state.intake = {
+            "child_name": child_name,
+            "child_age": child_age,
+            "child_interest": child_interest,
+            "story_objective": story_objective,
+            "your_name": your_name,
+            "recipient_email": recipient_email,
+            "language": st.session_state.lang,
+            # pass to your pipeline if needed
+            "page_length": page_length,
         }
         
-        lang = intake.get("language", "en")
-        
-        with st.spinner(T["ui"]["spinner"]):
-            # Build story and title with OpenAI
-            story_text = generate_story_text(child_name, child_age, child_interest, story_objective, your_name)
-            story_title = generate_story_title(text = story_text)
+        # Build per payment return URL
+        intake = st.session_state.intake
+        token = encode_intake(intake)
+        BASE_URL = st.secrets["app_base_url"]
+        download_url = f"{BASE_URL}/Download?intake={token}"
+        paypal_url = PAYPAL_LINKS[st.session_state.page_length]
+        paypal_url = add_query_params(paypal_url, {"return": download_url})
+        st.success("Intake saved. Please proceed to payment.")
 
-            # # Build story and title with Replicate GPT-5-Nano
-            # story_text = generate_story_text_replicate_gpt5nano(intake=intake)
-            # story_title = generate_story_title_replicate_gpt5nano(text = story_text, lang=lang)
-            
-            # Extract scenes and prompts
-            story_title = story_title.strip()
-            scenes, prompts = extract_scenes_and_prompts(story_text)
-            
-            # Generate audio
-            story_chunk = "\n\n".join(scenes)
-            print(story_title)
-            print("Story chunk for audio generation:")
-            print(story_chunk)
-            # story_chunk = sanitize_text_for_tts(story_chunk)
-            
-            for i in range(len(scenes)):
-                print(f"\n--- Scene {i+1} ---")
-                print(scenes[i])
-                print("\nPrompt:")
-                print(prompts[i])
-
-            story_audio = generate_audio_from_text_replicate(story_chunk = story_chunk, lang=lang)
-            story_audio_url = upload_audio_to_r2(audio_bytes = story_audio, filename=f"{story_title.replace(' ', '_')}_audio.mp3")
-            
-            # Genarate cover image
-            cover_prompt = f"Do not include any text in the image. Design a children's storybook cover illustration related to the topic of '{child_interest}'. Do not include any text or human-like characters in the image."
-            cover_b64 = generate_image_for_prompt_openai(cover_prompt)
-            # cover_b64 = generate_image_for_prompt(cover_prompt, size="storybook")
-
-            # Generate scene images
-            images_b64 = []
-            for p in prompts:
-                img_b64 = generate_image_for_prompt_openai(p)
-                # img_b64 = generate_image_for_prompt(p, size="storybook")
-                images_b64.append(img_b64)
-
-            # Create PDF bytes
-            pdf_bytes = create_storybook_pdf_bytes(
-                title=story_title,
-                author=your_name,
-                cover_image_b64=cover_b64,
-                scenes=scenes,
-                images_b64=images_b64,
-                story_audio_url=story_audio_url,
-            )
-            print("PDF bytes created.")
-
-            # Send via SendGrid
-            if recipient_email:
-                subject = T["email"]["subject"]
-                audio_link_html = build_audio_link(story_audio_url=story_audio_url, lang=intake["language"])
-                body = T["email"]["body"].format(audio_link=audio_link_html)
-
-                try:
-                    resp = send_email_with_attachment(
-                        send_to=recipient_email,
-                        subject=subject,
-                        body=body,
-                        attachment_bytes=pdf_bytes,
-                        filename=T["email"]["file_name"],
-                    )
-                    st.success(T["ui"]["success"])
-                    print(T["email"]["send_success"].format(email=recipient_email))
-                    
-                except Exception as e:
-                    print(T["email"]["send_failure"].format(e=e))
-            
-
-st.write("---")
-st.markdown(T["ui"]["home_help"])
-
-# End of file
+# Payment section (only shown after intake saved)
+if st.session_state.intake:
+    st.write("---")
+    st.subheader("Step 2 — Pay with PayPal")
+    price_map = {4: "$1.00", 8: "$1.49", 12: "$1.99"}
+    st.info(f"You selected **{st.session_state.page_length} pages** ({price_map[st.session_state.page_length]}). After payment, please go to the Download page to generate and download your PDF.")
+    paypal_url = PAYPAL_LINKS[st.session_state.page_length]
+    st.link_button("Pay", paypal_url)

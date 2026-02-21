@@ -15,7 +15,7 @@ Usage:
 streamlit run app.py
 
 """
-
+from __future__ import annotations
 import os
 import base64
 import io
@@ -158,6 +158,17 @@ IMAGE_MAX_HEIGHT = SPREAD_HEIGHT * 0.55
 TEXT_AREA_HEIGHT = SPREAD_HEIGHT * 0.35
 
 # Styles
+FALLBACK_STYLE = (
+    "storybook illustration, full-bleed composition, wide scene, background extends to edges, "
+    "no border, no frame, no white margins, soft pastel watercolor children’s book style, "
+    "gentle pastel palette (soft blues, mint greens, lavender, light peach), "
+    "balanced neutral daylight white balance, calm soothing mood, "
+    "whimsical soft cartoon style, round friendly shapes, safe for children, "
+    "main character consistent across pages: round face, simple dot eyes, soft outlines, "
+    "consistent clothing colors, same hairstyle, same gender, "
+    "no text in image, no real or identifiable person"
+)
+
 styles = getSampleStyleSheet()
 
 # Default paragraph style; will be adjusted with font sizing when needed
@@ -193,65 +204,96 @@ AUDIO_LINK_STYLE = getSampleStyleSheet()["Normal"]
 
 
 # ------------------ OpenAI prompts & generation ------------------
-
-def build_story_prompt(child_name: str, child_age: str, child_interest: str, story_objective: str, your_name: str) -> str:
-    prompt = f"""
-        You are a children's storybook generator. Create a personalized, age-appropriate, multi-scene illustrated storybook based on the input parameters below.
-        
-        Child name: {child_name}
-        Child age: {child_age}
-        Child interests: {child_interest}
-        Story objective: {story_objective}
-        
-        For total scene count and word count, strictly follow these guidelines based on the child's age {child_age}:
-        - For child's age from 0 - 2 years old, total scene count should be exactly 3 pages with total word count as close to 75 words as possible. 
-        - For child's age from 2 - 4 years old, total scene count should be exactly 5 pages with total word count as close to 125 words as possible.
-        - For child's age from 4 - 6 years old, total scene count should be exactly 6 pages with total word count as close to 150 words as possible.
-        - For child's age above 6 years old, total scene count should be exactly 6 pages with total word count as close to 180 words as possible.
-        
-        For each scene, follow these guidelines strictly:
-        - The scene text includes 2-5 sentences of narrative tailored to {child_age}-old children, incorporating {child_interest} and aligned with the story objective of {story_objective}.
-        - Keep the scene text simple, warm, and imaginative, language appropriate and easy enough for {child_age}-year-olds.
-        - After the scene text, then include one short illustration prompt in parentheses on its own line immediately after the scene text. 
-        - Then immediately, separate each scene (including both the scene text and illustration prompt) with '---' on its own line.
-        - Do not include any language that is not relevant to the scene text and illustration prompt in the generated output. 
-        - Do not include story title, nor any note at the beginning or end relating to word count and how the generated text meets the input requirements, or text like "Here is the personalized storybook for...".
-        
-        For illustration prompts, follow these guidelines strictly:
-        - Each illustration prompt should describe only what each scene appears visually. No text inside the images.
-        - Include in each illustration prompt that it is for storybook illustration, full-bleed composition, wide scene, background extends to edges, no border, no frame, no white margins, soft pastel watercolor style, main character has same appearance across pages.
-        - Illustrations of the fictional characters must be consistent throughout the entire scenes. The main character has the same appearance across pages: round face, simple dot eyes, soft outlines, consistent clothing colors, same hairstyle, same gender.
-        - Soft watercolor children-book illustration style. Gentle pastel color palette with soft blues, mint greens, lavender, and light peach.
-        - Balanced neutral lighting, calm and soothing mood. No golden yellow, orange, or sepia color cast.
-        - Round shapes, friendly, safe for children. Whimsical, soft cartoon style. Daylight white balance.
-        - Do not depict any real or identifiable person, nor mention any children name in the prompt. Create fully fictional, stylized cartoon characters with no realistic human features.
-
-        Follow these for the story guidelines:
-        - Scenes should begin with a captivating hook. 
-        - Include a gentle problem and a positive resolution. 
-        - Make sure the child interests shape the story world and plot.
-        
-        Adhere to these writing style guidelines:
-        - Use clear language suitable for {child_age} children. Keep language simple, warm, and imaginative. 
-        - Keep tone warm, soothing, and encouraging.
-        - No scary or age-inappropriate content. 
-        - No typos and smooth flows.
-        
-        Importantly, keep the scene / page count and word count exactly as specified above. Use simple words and short sentences suitable for {child_age} children.
-        Very importantly again, strictly follow the scene guidelines and illustration prompt guidelines mentioned above. 
-        
-        Lastly, strictly adhere to the following instructions for scene formatting, for each scene:
-        - Do not include any text other than the scene text and illustration prompt, such as title or introductory text for example "Here is the personalized storybook for...".
-        - Immediately after the scene text, include one short illustration prompt in parentheses on its own new line. 
-        - Then immediately, separate each scene (including both the scene text and illustration prompt) with '---' on its own new line.
-        - Do not include any language that is not relevant to the scene text and illustration prompt in the generated output, such as story title, or notes at the beginning or end related to word count and how the generated text meets the requirements.
-        - Remember to separate each scene (including both the scene text and illustration prompt) with '---' on its own line.
-        - Remember to include one short illustration prompt in parentheses on its own new line immediately after the scene text for each scene.
-        - Remember to include in each illustration prompt that it is for storybook illustration, full-bleed composition, wide scene, background extends to edges, no border, no frame, no white margins, soft pastel watercolor style.
-        - Remember that do not include any text other than the scene text and illustration prompt, such as "Here is the personalized storybook for..." in scene texts.
-        
-        Story starts now:
+def build_story_prompt(
+    child_name: str,
+    child_age: str,
+    child_interest: str,
+    story_objective: str,
+    your_name: str,
+    page_length: int,
+) -> str:
     """
+    page_length: expected 4, 8, or 12 (number of scenes/pages)
+    """
+
+    # Defensive normalization
+    try:
+        age_num = float(str(child_age).strip())
+    except Exception:
+        age_num = None
+
+    if page_length not in (4, 8, 12):
+        # fall back safely
+        page_length = 4
+
+    # Word targets: use age to set density, then scale by page_length
+    # (Keep these conservative to reduce rambling.)
+    if age_num is None:
+        per_scene_target = 28
+        sentence_guidance = "2–4 short sentences"
+    elif age_num < 2:
+        per_scene_target = 18
+        sentence_guidance = "1–2 very short sentences"
+    elif age_num < 4:
+        per_scene_target = 24
+        sentence_guidance = "2–3 short sentences"
+    elif age_num < 6:
+        per_scene_target = 28
+        sentence_guidance = "2–4 short sentences"
+    else:
+        per_scene_target = 32
+        sentence_guidance = "3–5 sentences"
+
+    total_target = per_scene_target * page_length
+    # Give the model a tight band (±10–15%) to help it comply
+    per_scene_min = max(12, int(per_scene_target * 0.85))
+    per_scene_max = int(per_scene_target * 1.15)
+
+    prompt = f"""
+        You are a children's storybook generator. Create a personalized, age-appropriate, multi-scene illustrated storybook.
+
+        INPUTS
+        - Child name (for story text only): {child_name}
+        - Child age: {child_age}
+        - Child interests: {child_interest}
+        - Story objective: {story_objective}
+        - Author name: {your_name}
+        - Required page/scenes count: {page_length} scenes (exactly {page_length})
+
+        HARD OUTPUT FORMAT (MUST FOLLOW EXACTLY)
+        - Output ONLY the scenes. No title. No intro. No outro. No commentary.
+        - Produce exactly {page_length} scenes.
+        - For each scene, output:
+        1) Scene narrative text (no label like "Scene 1")
+        2) On the next line: ONE illustration prompt in parentheses
+        3) Then a line containing exactly: ---
+        - The last scene must also end with '---'.
+
+        SCENE WRITING RULES (STRICT)
+        - The story text may mention "{child_name}" (main character). Illustration prompts MUST NOT include the child's name or any real person name.
+        - Keep language warm, soothing, encouraging, and imaginative. No scary content. No moralizing lectures.
+        - Overall arc: hook early → gentle problem → positive resolution by the end.
+        - Interests must shape the world/plot naturally (not just mentioned).
+        - Length control:
+        - Each scene should be {sentence_guidance}.
+        - Target {per_scene_min}–{per_scene_max} words per scene (approx).
+        - Total story target ≈ {total_target} words.
+
+        ILLUSTRATION PROMPT RULES (STRICT)
+        - The illustration prompt describes ONLY the visual scene. No dialogue. No text in the image.
+        - Always include these style constraints (verbatim concepts are OK):
+        - "storybook illustration", "full-bleed composition", "wide scene",
+            "background extends to edges", "no border", "no frame", "no white margins"
+        - Soft pastel watercolor children’s book style; gentle pastel palette (soft blues, mint greens, lavender, light peach)
+        - Balanced neutral daylight white balance; calm soothing mood; avoid golden yellow/orange/sepia cast
+        - Whimsical soft cartoon style; round friendly shapes; safe for children
+        - Main character consistent across pages: round face, simple dot eyes, soft outlines, consistent clothing colors, same hairstyle, same gender
+        - Do not depict any real or identifiable person. Fully fictional stylized cartoon characters only.
+        - Do NOT include the child’s name or any real name in the illustration prompt.
+
+        NOW GENERATE THE STORY IN THE REQUIRED FORMAT:
+    """.strip()
+
     return prompt
 
 def build_story_prompt_lang(intake: dict) -> str:
@@ -278,7 +320,7 @@ def build_story_prompt_lang(intake: dict) -> str:
             - For child's age above 6 years old, total scene count should be exactly 4 pages with total word count as close to 100 words as possible.
             
             For each scene, follow these guidelines strictly:
-            - The scene text includes 2-5 sentences of narrative tailored to {intake['child_age']}-old children, incorporating {intake['child_interest']} and aligned with the story objective of {intake['story_objective']}.
+            - The scene text includes 2-5 sentences of narrative tailored to {intake['child_age']}-old children, featuring {child_name} as the main character, incorporating {intake['child_interest']} and aligned with the story objective of {intake['story_objective']}.
             - Keep the scene text simple, warm, and imaginative, language appropriate and easy enough for {intake['child_age']}-year-olds.
             - After the scene text, then include one short illustration prompt in parentheses on its own line immediately after the scene text. 
             - Then immediately, separate each scene (including both the scene text and illustration prompt) with '---' on its own line.
@@ -336,7 +378,7 @@ def build_story_prompt_lang(intake: dict) -> str:
             - 对于6岁以上的孩子，总场景数应为4页，字数尽量接近100字。
             
             对于每个场景，请严格遵循以下指导方针：
-            - 场景文本包括2-5个句子的叙述，适合 {intake['child_age']} 岁的孩子，融入 {intake['child_interest']} 并与故事目标 {intake['story_objective']} 保持一致。
+            - 场景文本包括2-5个句子的叙述，适合 {intake['child_age']} 岁的孩子，以 {intake['child_name']} 为主角，融入 {intake['child_interest']} 并与故事目标 {intake['story_objective']} 保持一致。
             - 保持场景文本简单、温暖且富有想象力，语言适合 {intake['child_age']} 岁的孩子理解。
             - 在场景文本之后，在新行中立即包含一个括号内的简短插图提示。 
             - 然后立即，用“---”分隔每个场景（包括场景文本和插图提示）。
@@ -403,7 +445,7 @@ def build_story_prompt_replicate(intake: dict) -> str:
             - For child's age above 6 years old, total scene count should be exactly 6 pages/scenes with total word count as close to 180 words as possible.
             
             For each scene, follow these guidelines strictly:
-            - The scene text includes 2-5 sentences of narrative in one paragraph tailored to {child_age}-old children, incorporating {child_interest} and aligned with the story objective of {story_objective}. Do not have more than one paragraph per scene text.
+            - The scene text includes 2-5 sentences of narrative in one paragraph tailored to {child_age}-old children, featuring {child_name} as the main character, incorporating {child_interest} and aligned with the story objective of {story_objective}. Do not have more than one paragraph per scene text.
             - Keep the scene text simple, warm, and imaginative, language appropriate and easy enough for {child_age}-year-olds.
             - After the scene text, then include one short illustration prompt in parentheses on its own line immediately after the scene text. 
             - Then immediately, separate each scene (including both the scene text and illustration prompt) with '---' on its own line.
@@ -447,7 +489,7 @@ def build_story_prompt_replicate(intake: dict) -> str:
             - 对于6岁以上的孩子，总场景数应为6页/场景，字数尽量接近180字。
             
             对于每个场景，请严格遵循以下指导方针：
-            - 场景文本包括2-5个句子的叙述在一个自然段，适合 {child_age} 岁的孩子，融入 {child_interest} 并与故事目标 {story_objective} 保持一致。
+            - 场景文本包括2-5个句子的叙述在一个自然段，适合 {child_age} 岁的孩子，以 {child_name} 为主角，融入 {child_interest} 并与故事目标 {story_objective} 保持一致。
             - 保持场景文本简单、温暖且富有想象力，语言适合 {child_age} 岁的孩子理解。
             - 在场景文本之后，在新行中立即包含一个放在括号内的简短插图提示。一定要在新的一行。 
             - 然后立即，用“---”分隔每个场景（包括场景文本和插图提示）。
@@ -479,20 +521,34 @@ def build_story_prompt_replicate(intake: dict) -> str:
     return prompt
 
 
-def generate_story_text(child_name, child_age, child_interest, story_objective, your_name):
-    prompt = build_story_prompt(child_name, child_age, child_interest, story_objective, your_name)
+def generate_story_text(child_name, child_age, child_interest, story_objective, your_name, page_length: int):
+    prompt = build_story_prompt(
+        child_name=child_name,
+        child_age=child_age,
+        child_interest=child_interest,
+        story_objective=story_objective,
+        your_name=your_name,
+        page_length=page_length,
+    )
 
     response = openai_client.chat.completions.create(
         model="gpt-5.1",
         messages=[
-            {"role": "system", "content": "You are an artful and masterful expert specializing for children storytelling."},
-            {"role": "user", "content": prompt}
-           ],
+            {
+                "role": "system",
+                "content": (
+                    "You write children's picture-book scenes with strict formatting compliance. "
+                    "Return ONLY the required scene blocks exactly as specified. "
+                    "Do not add titles, headings, numbering, or extra commentary."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ],
         max_completion_tokens=3000,
         temperature=0.7,
     )
-    text = response.choices[0].message.content
-    return text
+    
+    return response.choices[0].message.content
 
 # OpenAI text generation with multiple languages
 def generate_story_text_lang(intake: dict) -> str:
@@ -728,22 +784,97 @@ def generate_story_title_replicate_gpt5nano(text: str, lang: str) -> str:
 
     return text.strip()
 
-def extract_scenes_and_prompts(story_text: str) -> Tuple[List[str], List[str]]:
-    """Return (scene_texts, illustration_prompts) in order."""
+def extract_scenes_and_prompts(
+    story_text: str,
+    expected_scenes: Optional[int] = None,
+) -> Tuple[List[str], List[str]]:
+    """
+    Return (scene_texts, illustration_prompts) in order.
+
+    - Splits scenes by '---'
+    - Extracts ONE illustration prompt per scene (prefer last line in parentheses)
+    - Optionally enforces exact scene count (pad/truncate) for pipeline safety
+    """
+
+    if not story_text:
+        return ([], [])
+
+    # Normalize: tolerate variants like " --- " or extra whitespace
+    # Split on '---' anywhere, then strip empty blocks.
     raw_scenes = [s.strip() for s in story_text.split('---') if s.strip()]
-    scene_texts = []
-    prompts = []
+
+    scene_texts: List[str] = []
+    prompts: List[str] = []
+
     for s in raw_scenes:
-        # find last parentheses block as illustration prompt
-        if '(' in s and ')' in s:
-            before = s.rsplit('(', 1)[0].strip()
-            prompt = s.rsplit('(', 1)[1].rsplit(')', 1)[0].strip()
-            scene_texts.append(before)
-            prompts.append(prompt)
-        else:
-            scene_texts.append(s)
-            prompts.append('')
+        # Prefer the last non-empty line as the prompt if it looks like "(...)"
+        lines = [ln.strip() for ln in s.splitlines() if ln.strip()]
+        prompt = ""
+        scene_body = s.strip()
+
+        if lines:
+            last = lines[-1]
+            # If last line is a single parenthetical block, treat it as prompt
+            if last.startswith("(") and last.endswith(")") and len(last) >= 2:
+                prompt = last[1:-1].strip()
+                scene_body = "\n".join(lines[:-1]).strip()
+            else:
+                # Fallback: your original logic (last parentheses block)
+                if "(" in s and ")" in s:
+                    before, after = s.rsplit("(", 1)
+                    if ")" in after:
+                        prompt_candidate = after.rsplit(")", 1)[0].strip()
+                        # Heuristic: only accept if it's reasonably prompt-like and not huge
+                        if 5 <= len(prompt_candidate) <= 600:
+                            prompt = prompt_candidate
+                            scene_body = before.strip()
+
+        scene_texts.append(scene_body)
+        prompts.append(prompt)
+
+    # Enforce exact expected scene count for safety downstream
+    if expected_scenes is not None and expected_scenes > 0:
+        if len(scene_texts) > expected_scenes:
+            scene_texts = scene_texts[:expected_scenes]
+            prompts = prompts[:expected_scenes]
+        elif len(scene_texts) < expected_scenes:
+            # Pad with empty scenes/prompts (or you can repeat the last scene)
+            missing = expected_scenes - len(scene_texts)
+            scene_texts.extend([""] * missing)
+            prompts.extend([""] * missing)
+
     return scene_texts, prompts
+
+# Normalize image prompts
+def normalize_prompt(p: str) -> str:
+    p = (p or "").strip()
+
+    # If prompt missing, use only fallback style + a minimal scene descriptor
+    if not p:
+        return f"{FALLBACK_STYLE}. Cozy scene in a magical storybook world."
+
+    # Ensure key constraints are present (append if missing)
+    # Keep this conservative to avoid duplicating huge text.
+    required_phrases = [
+        "storybook illustration",
+        "full-bleed",
+        "no border",
+        "no frame",
+        "no white margins",
+        "soft pastel",
+        "watercolor",
+        "no text",
+    ]
+    lower = p.lower()
+    if not all(phrase in lower for phrase in required_phrases):
+        p = f"{p}. {FALLBACK_STYLE}"
+
+    # Avoid overly long prompts (some image APIs have limits; keep it safe)
+    if len(p) > 1200:
+        p = p[:1200].rstrip()
+
+    return p
+
 
 # ------------------ Audio generation & storage ------------------
 def generate_audio_from_text(story_chunk: str) -> str:
@@ -1198,10 +1329,10 @@ def generate_image_for_prompt_openai(prompt: str, size="1536x1024", retries=3) -
     for attempt in range(retries):
         try:
             resp = openai_client.images.generate(
-                model="gpt-image-1-mini",
+                model="gpt-image-1-mini", # Latest GPT-image-1.5
                 prompt=prompt,
                 size=size,
-                quality="low",
+                quality="low", # to reduce latency and cost
                 n=1,
             )
             print(f"Generated image successfully.")

@@ -1,6 +1,6 @@
 LANG = {
     "ui": {
-        "instructions": "Create a magical storybook for your child. Fill in ALL the details below and receive it by email.",
+        "instructions": "Create a magical storybook for your child. Fill in ALL the details, make payment and download.",
         "language_label": "Language",
         "form_header": "Story Inputs",
         "child_name": "Child's Name",
@@ -9,6 +9,8 @@ LANG = {
         "objective": "Story Objective",
         "author_name": "Author Name",
         "email": "Parent Email",
+        "page_length": "Choose Book Length",
+        "help": "Pricing: $0.99 (4 pages), $1.99 (8 pages), $2.99 (12 pages)",
         "generate": "Generate Story",
         "error_missing_fields": "Please fill in at least the child's name and your email.",
         "submit_success": "Thank you! We are generating your magical story now. This may take a moment and please do not close this page. Please expect an email in about 5 minutes. If it's not in your inbox, kindly check your Spam or Promotions folder.",

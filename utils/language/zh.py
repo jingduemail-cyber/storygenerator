@@ -1,6 +1,6 @@
 LANG = {
     "ui": {
-        "instructions": "为孩子定制魔法故事书，请填写所有信息后邮箱收取。",
+        "instructions": "为孩子定制魔法故事书，请填写所有信息并完成支付后下载。",
         "language_label": "语言",
         "form_header": "故事输入",
         "child_name": "孩子的名字",
@@ -9,6 +9,8 @@ LANG = {
         "objective": "故事目标",
         "author_name": "作者姓名",
         "email": "家长邮箱",
+        "page_length": "选择故事书长度",
+        "help": "价格：$0.99（4页），$1.99（8页），$2.99（12页）",
         "generate": "生成故事",
         "error_missing_fields": "请至少填写孩子的名字和您的电子邮件。",
         "submit_success": "谢谢！我们正在为您生成神奇的故事。这可能需要一些时间，请不要关闭此页面。请在大约5分钟内查收电子邮件。如果没有收到，请检查您的垃圾邮件或促销文件夹。",
