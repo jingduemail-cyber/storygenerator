@@ -18,9 +18,69 @@ import json
 import streamlit.components.v1 as components
 import streamlit as st
 from utils.intake_codec import decode_intake
+from utils.language.loader import get_language
+from utils.ui import render_top_bar, get_app_title
 
-st.set_page_config(page_title="Generate & Download", layout="centered")
-st.title("Generate & Download")
+PAGE_ID = "download"
+
+if "lang" not in st.session_state:
+    st.session_state.lang = "en"
+
+params = st.query_params
+
+if "lang" in params:
+    st.session_state.lang = params["lang"]
+
+T = get_language(st.session_state.lang)
+
+# --- Set up global page formatting and styles ---
+st.set_page_config(
+    page_title=get_app_title(T, PAGE_ID),
+    layout="centered"
+)
+
+render_top_bar(T, PAGE_ID)
+
+# Global CSS for clean, modern UI
+st.markdown("""
+<style>
+    .main-title {
+        font-size: 40px;
+        font-weight: 700;
+        text-align: center;
+        margin-bottom: 0.5rem;
+    }
+    .subtitle {
+        font-size: 20px;
+        color: #666;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .section-header {
+        font-size: 24px;
+        font-weight: 600;
+        margin-top: 2rem;
+        margin-bottom: 0.5rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Inject CSS to style placeholder + input
+st.markdown("""
+<style>
+/* Placeholder text styling */
+input::placeholder {
+    font-style: italic;
+    color: #888888 !important;
+}
+
+/* When typing, override text style */
+input {
+    font-style: normal !important;
+    color: black !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # Intake setup: hydrate from localStorage via query param, with fallback to session state
 # Try session first
@@ -29,7 +89,6 @@ intake = st.session_state.get("intake")
 # If missing, try query param
 if not intake:
     token = st.query_params.get("intake")
-    print("Received token from query params:", token)
     
     if token:
         try:
@@ -39,14 +98,14 @@ if not intake:
             intake = None
 
 if not intake:
-    st.warning("No intake found. Please go back to Home and submit the form again.")
-    st.page_link("Home.py", label="Go to Home", icon="🏠")
+    st.warning(T["ui"]["download_no_intake"])
+    st.page_link("Home.py", label=T["ui"]["go_home"], icon="🏠")
     st.stop()
 
 # Display intake summary for confirmation
-st.write("✅ Intake found.")
-st.write(f"Selected pages: **{intake.get('page_length', 4)}**")
-st.info("Click below to generate your storybook PDF. Please do not close this tab while generating.")
+st.write(T["ui"]["download_intake_found"])
+st.write(T["ui"]["page_selected"].format(page_length=intake.get("page_length", "N/A")))
+st.info(T["ui"]["download_info"])
 
 # Avoid regen on refresh
 if "pdf_bytes" not in st.session_state:
@@ -121,15 +180,15 @@ def do_generate():
 
 # Generate button
 if st.session_state.pdf_bytes is None:
-    if st.button("Generate storybook"):
-        with st.spinner("Generating... please keep this tab open"):
+    if st.button(T["ui"]["generate_button"]):
+        with st.spinner(T["ui"]["spinner"]):
             do_generate()
-        st.success("Generation complete. Download below.")
+        st.success(T["ui"]["generation_complete"])
 
 # Download button (enabled when ready)
 if st.session_state.pdf_bytes:
     st.download_button(
-        label="Download storybook PDF",
+        label=T["ui"]["download_button"],
         data=st.session_state.pdf_bytes,
         file_name=st.session_state.pdf_filename or "storybook.pdf",
         mime="application/pdf",

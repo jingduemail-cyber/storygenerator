@@ -127,7 +127,7 @@ with st.form(key="story_form"):
         help=T["ui"]["help"]
     )
 
-    submitted = st.form_submit_button("Continue to Payment")
+    submitted = st.form_submit_button(T["ui"]["continue_to_payment"])
 
 # Save intake only (no generation here)
 if submitted:
@@ -154,13 +154,13 @@ if submitted:
         download_url = f"{BASE_URL}/Download?intake={token}"
         paypal_url = PAYPAL_LINKS[st.session_state.page_length]
         paypal_url = add_query_params(paypal_url, {"return": download_url})
-        st.success("Intake saved. Please proceed to payment.")
+        st.success(T["ui"]["intake_saved"])
 
 # Payment section (only shown after intake saved)
 if st.session_state.intake:
     st.write("---")
-    st.subheader("Step 2 — Pay with PayPal")
+    st.subheader(T["ui"]["step_2"])
     price_map = {4: "$1.00", 8: "$1.49", 12: "$1.99"}
-    st.info(f"You selected **{st.session_state.page_length} pages** ({price_map[st.session_state.page_length]}). After payment, please go to the Download page to generate and download your PDF.")
+    st.info(T["ui"]["pre_payment_info"].format(page_length=st.session_state.page_length, price=price_map[st.session_state.page_length]))
     paypal_url = PAYPAL_LINKS[st.session_state.page_length]
-    st.link_button("Pay", paypal_url)
+    st.link_button(T["ui"]["pay_button"], paypal_url)
